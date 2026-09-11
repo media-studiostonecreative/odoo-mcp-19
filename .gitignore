@@ -65,3 +65,17 @@ cyanview-*.html
 
 # Flat copy of the package at the repo root (the real one lives in src/odoo_mcp/)
 /odoo_mcp/
+
+# Business Pulse dashboard (separate Next.js app — see dashboard/)
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/data/
+dashboard/*.tsbuildinfo
+dashboard/coverage/
+dashboard/next-env.d.ts
+# The Python "lib/" rule above (for venvs) also matches any directory named
+# "lib" anywhere in the repo, which silently swallows dashboard/src/lib/ —
+# the dashboard's entire server-side library. Un-ignore it explicitly.
+!dashboard/src/lib/
+!dashboard/src/lib/**
