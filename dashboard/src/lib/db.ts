@@ -9,15 +9,25 @@ import path from "node:path";
  * to Odoo or Shopify — this is local alert/scan/audit state only.
  */
 
-const DATA_DIR = process.env.DASHBOARD_DATA_DIR ?? path.resolve(process.cwd(), "data");
-const DB_PATH = path.join(DATA_DIR, "website-health.sqlite3");
-
 let db: Database.Database | null = null;
+let currentDbPath: string | null = null;
 
 export function getHealthDb(): Database.Database {
+  const dataDir = process.env.DASHBOARD_DATA_DIR ?? path.resolve(process.cwd(), "data");
+  const dbPath = path.join(dataDir, "website-health.sqlite3");
+
+  // If the data directory changed, close the old database
+  if (currentDbPath !== dbPath) {
+    if (db) {
+      db.close();
+      db = null;
+    }
+    currentDbPath = dbPath;
+  }
+
   if (db) return db;
-  mkdirSync(DATA_DIR, { recursive: true });
-  db = new Database(DB_PATH);
+  mkdirSync(dataDir, { recursive: true });
+  db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
@@ -27,6 +37,7 @@ export function getHealthDb(): Database.Database {
 export function closeHealthDb(): void {
   db?.close();
   db = null;
+  currentDbPath = null;
 }
 
 const SCHEMA = `
