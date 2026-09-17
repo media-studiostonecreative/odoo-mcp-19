@@ -79,3 +79,6 @@ dashboard/next-env.d.ts
 # the dashboard's entire server-side library. Un-ignore it explicitly.
 !dashboard/src/lib/
 !dashboard/src/lib/**
+
+# Local git worktrees used for isolated feature work (superpowers skills).
+.worktrees/
