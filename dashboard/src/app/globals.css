@@ -1,0 +1,173 @@
+/* dashboard/src/app/globals.css */
+:root {
+  --bg: #0f0c12;
+  --surface: #121016;
+  --surface-alt: #19151d;
+  --border: rgba(233, 238, 245, 0.14);
+  --border-strong: rgba(233, 238, 245, 0.26);
+  --text: #e9edf2;
+  --text-soft: #8b929e;
+  --accent: #9fdcff;
+  --accent-strong: #cdeeff;
+  --accent-soft: rgba(159, 220, 255, 0.2);
+  --on-accent: #06212f;
+  --magenta: #ff5fd6;
+  --magenta-soft: rgba(255, 95, 214, 0.2);
+  --on-magenta: #2b0821;
+  --neon-yellow: #ffe05a;
+  --on-yellow: #2b2100;
+  --positive: #6bffb8;
+  --warning: #ffd25c;
+  --negative: #ff5c72;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  position: relative;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Cyberpunk backdrop: faint grid + soft color glows, fixed behind all
+   content. Kept subtle so panels stay the visual focus, not the background. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 850px at 100% -5%, rgba(255, 95, 214, 0.32), transparent 62%),
+    radial-gradient(900px 700px at 8% -8%, rgba(159, 220, 255, 0.38), transparent 62%),
+    radial-gradient(660px 500px at 108% 22%, rgba(255, 95, 214, 0.18), transparent 60%),
+    radial-gradient(500px 380px at 60% 45%, rgba(255, 95, 214, 0.08), transparent 65%),
+    radial-gradient(1200px 850px at 50% 118%, rgba(159, 220, 255, 0.22), transparent 68%),
+    radial-gradient(900px 700px at 0% 100%, rgba(90, 240, 210, 0.22), transparent 60%),
+    radial-gradient(760px 600px at 100% 60%, rgba(159, 220, 255, 0.14), transparent 65%),
+    repeating-linear-gradient(115deg, rgba(233, 238, 245, 0.045) 0px, rgba(233, 238, 245, 0.045) 1px, transparent 1px, transparent 90px),
+    linear-gradient(rgba(233, 238, 245, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(233, 238, 245, 0.08) 1px, transparent 1px);
+  background-size: auto, auto, auto, auto, auto, auto, auto, auto, 42px 42px, 42px 42px;
+  mask-image: linear-gradient(to bottom, black, rgba(0, 0, 0, 0.8) 60%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.bracket-label {
+  font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+input {
+  font-family: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* "Bracket" panel: a faint full border plus slightly brighter corner ticks —
+   a subtle HUD/schematic accent rather than a plain box. */
+.bracket-panel {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.bracket-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  pointer-events: none;
+  --tick: 14px;
+  background:
+    linear-gradient(var(--border-strong), var(--border-strong)) top left / var(--tick) 1px no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) top left / 1px var(--tick) no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) top right / var(--tick) 1px no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) top right / 1px var(--tick) no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) bottom left / var(--tick) 1px no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) bottom left / 1px var(--tick) no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) bottom right / var(--tick) 1px no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) bottom right / 1px var(--tick) no-repeat;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(143, 211, 255, 0.6);
+  animation: live-pulse 2s ease-out infinite;
+}
+
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(143, 211, 255, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(143, 211, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(143, 211, 255, 0);
+  }
+}
+
+/* Small crosshair corner mark for interactive/preview cards — echoes the
+   viewfinder-style corner accents in the reference mood board. */
+.corner-mark {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--border-strong);
+  pointer-events: none;
+}
+
+.tri {
+  display: inline-block;
+  font-size: 9px;
+  color: var(--accent);
+  transform: translateY(-1px);
+}
