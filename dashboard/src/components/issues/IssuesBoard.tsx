@@ -27,8 +27,9 @@ export function IssuesBoard({ issues, onAction, onSelect }: { issues: IssueRow[]
   const [dragOverColumn, setDragOverColumn] = useState<ColumnKey | null>(null);
 
   const siteFiltered = siteFilter === "all" ? issues : issues.filter((i) => i.site === siteFilter);
-  const activeItems = siteFiltered.filter((i) => i.status !== "resolved");
+  const activeItems = siteFiltered.filter((i) => i.status !== "resolved" && i.status !== "snoozed");
   const doneItems = siteFiltered.filter((i) => i.status === "resolved");
+  const snoozedItems = siteFiltered.filter((i) => i.status === "snoozed");
   const issuesTabItems = activeItems.filter((i) => !isAbandonedAlert(i));
   const abandonedTabItems = activeItems.filter(isAbandonedAlert);
   const boardItems = subTab === "issues" ? issuesTabItems : subTab === "abandoned" ? abandonedTabItems : [];
@@ -103,6 +104,12 @@ export function IssuesBoard({ issues, onAction, onSelect }: { issues: IssueRow[]
           );
         })}
       </div>
+
+      {snoozedItems.length > 0 && (
+        <p className="font-mono" style={{ fontSize: 11, color: "var(--text-soft)", opacity: 0.7, margin: "-8px 0 14px", letterSpacing: 0.3 }}>
+          {snoozedItems.length} snoozed (hidden until {snoozedItems.length === 1 ? "it wakes" : "they wake"})
+        </p>
+      )}
 
       <div style={{ ...toneVars(subTab === "issues" ? "red" : subTab === "abandoned" ? "yellow" : "cyan"), border: "1px solid var(--border-strong)", borderRadius: "0 12px 12px 12px", background: "var(--surface)", padding: 20 } as React.CSSProperties}>
         {subTab === "done" ? (

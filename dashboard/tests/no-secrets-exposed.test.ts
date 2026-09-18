@@ -18,7 +18,16 @@ function walk(dir: string): string[] {
 const ROOT = path.resolve(__dirname, "..");
 
 describe("static guarantee: app/component/route surfaces never reference raw credentials", () => {
-  const forbiddenIdentifiers = ["ODOO_API_KEY", "ODOO_PASSWORD", "apiKey", "accessToken", "TOKEN_ENCRYPTION_KEY"];
+  const forbiddenIdentifiers = [
+    "ODOO_API_KEY",
+    "ODOO_PASSWORD",
+    "apiKey",
+    "accessToken",
+    "TOKEN_ENCRYPTION_KEY",
+    "loadOdooCredentials",
+    "loadShopifyCredentials",
+    "OdooCredentials",
+  ];
 
   const allowlistedFiles = new Set([
     path.join(ROOT, "src/lib/env.ts"),
