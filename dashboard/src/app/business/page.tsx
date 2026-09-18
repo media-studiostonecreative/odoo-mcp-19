@@ -26,6 +26,12 @@ interface OverviewResponse {
   revenueDelta: number;
 }
 
+function addOneDayISO(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function deltaTone(value: number, higherIsBetter: boolean): "positive" | "negative" | "neutral" {
   if (value === 0) return "neutral";
   const isUp = value > 0;
@@ -44,9 +50,13 @@ export default function BusinessDataPage() {
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    if (period === "custom" && (!customStart || !customEnd)) return;
+    if (period === "custom" && (!customStart || !customEnd)) {
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
     setLoading(true);
@@ -55,7 +65,7 @@ export default function BusinessDataPage() {
     const params = new URLSearchParams({ period });
     if (period === "custom") {
       params.set("start", customStart);
-      params.set("end", customEnd);
+      params.set("end", addOneDayISO(customEnd)); // customEnd is the user's INCLUSIVE last day; the API's endISO is exclusive
     }
 
     fetch(`/api/business/overview?${params.toString()}`)
@@ -77,7 +87,7 @@ export default function BusinessDataPage() {
     return () => {
       cancelled = true;
     };
-  }, [period, customStart, customEnd]);
+  }, [period, customStart, customEnd, reloadKey]);
 
   return (
     <Page title="Business Data" description="Odoo quotation conversion — win rate, drop rate, and revenue.">
@@ -125,8 +135,28 @@ export default function BusinessDataPage() {
       </div>
 
       {error && (
-        <div style={{ border: "1px solid var(--negative)", borderRadius: 10, padding: 16, color: "var(--negative)", fontSize: 13, marginBottom: 14 }}>
-          {error}
+        <div style={{ border: "1px solid var(--negative)", borderRadius: 10, padding: 16, color: "var(--negative)", fontSize: 13, marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="font-mono"
+            style={{
+              border: "1px solid var(--border-strong)",
+              background: "var(--surface)",
+              color: "var(--text)",
+              padding: "6px 10px",
+              borderRadius: 8,
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              cursor: "pointer",
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -134,7 +164,9 @@ export default function BusinessDataPage() {
 
       {data && (
         <>
-          <p style={{ color: "var(--text-soft)", fontSize: 12, marginBottom: 14 }}>{data.label}</p>
+          <p style={{ color: "var(--text-soft)", fontSize: 12, marginBottom: 14 }}>
+            {period === "custom" ? `${customStart} to ${customEnd}` : data.label}
+          </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14 }}>
             <StatCard
               label="Win Rate"
@@ -152,7 +184,14 @@ export default function BusinessDataPage() {
               value={formatCurrency(data.current.revenue)}
               delta={{ text: deltaText(data.revenueDelta, (v) => formatCurrency(v)), tone: deltaTone(data.revenueDelta, true) }}
             />
-            <StatCard label="Avg Deal Size" value={formatCurrency(data.current.avgDealSize)} />
+            <StatCard
+              label="Avg Deal Size"
+              value={formatCurrency(data.current.avgDealSize)}
+              delta={{
+                text: deltaText(data.current.avgDealSize - data.previous.avgDealSize, (v) => formatCurrency(v)),
+                tone: deltaTone(data.current.avgDealSize - data.previous.avgDealSize, true),
+              }}
+            />
           </div>
         </>
       )}

@@ -2,6 +2,11 @@ import "server-only";
 
 export type PeriodKey = "month" | "quarter" | "ytd" | "12months" | "custom";
 
+// Note: this guarantees the SAME result regardless of the host server's timezone,
+// which was the bug being fixed. It does not guarantee alignment with the
+// company's own local business calendar — an order confirmed very late in the
+// business's local day could fall in a different UTC calendar bucket. Accepted
+// limitation, not in scope to fix here.
 /** startISO inclusive, endISO exclusive, both YYYY-MM-DD — for Odoo domain >=/< comparisons. */
 export interface DateRange {
   startISO: string;
