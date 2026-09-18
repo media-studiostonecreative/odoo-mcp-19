@@ -3,17 +3,17 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
-import { DataTable } from "@/components/ui/DataTable";
 import { toneVars } from "@/components/ui/tones";
 import type { IssueRow, AlertAction } from "./IssueDrawer";
 
-type ColumnKey = "open" | "acknowledged";
-type SiteFilter = "all" | "retail" | "wholesale";
-type SubTab = "issues" | "abandoned" | "done";
+type ColumnKey = "open" | "acknowledged" | "done";
+type Site = "retail" | "wholesale";
+type Scope = "issues" | "abandoned";
 
-const COLUMNS: { key: ColumnKey; label: string; dropAction: AlertAction }[] = [
-  { key: "open", label: "Open", dropAction: "reopen" },
-  { key: "acknowledged", label: "In Progress", dropAction: "acknowledge" },
+const COLUMNS: { key: ColumnKey; label: string; status: IssueRow["status"]; dropAction: AlertAction }[] = [
+  { key: "open", label: "Open", status: "open", dropAction: "reopen" },
+  { key: "acknowledged", label: "In Progress", status: "acknowledged", dropAction: "acknowledge" },
+  { key: "done", label: "Done", status: "resolved", dropAction: "resolve" },
 ];
 
 function isAbandonedAlert(issue: IssueRow): boolean {
@@ -21,22 +21,23 @@ function isAbandonedAlert(issue: IssueRow): boolean {
 }
 
 export function IssuesBoard({ issues, onAction, onSelect }: { issues: IssueRow[]; onAction: (issueId: number, action: AlertAction) => Promise<void>; onSelect: (issue: IssueRow) => void }) {
-  const [siteFilter, setSiteFilter] = useState<SiteFilter>("all");
-  const [subTab, setSubTab] = useState<SubTab>("issues");
+  const [site, setSite] = useState<Site>("retail");
+  const [scope, setScope] = useState<Scope>("issues");
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<ColumnKey | null>(null);
 
-  const siteFiltered = siteFilter === "all" ? issues : issues.filter((i) => i.site === siteFilter);
-  const activeItems = siteFiltered.filter((i) => i.status !== "resolved" && i.status !== "snoozed");
-  const doneItems = siteFiltered.filter((i) => i.status === "resolved");
-  const snoozedItems = siteFiltered.filter((i) => i.status === "snoozed");
-  const issuesTabItems = activeItems.filter((i) => !isAbandonedAlert(i));
-  const abandonedTabItems = activeItems.filter(isAbandonedAlert);
-  const boardItems = subTab === "issues" ? issuesTabItems : subTab === "abandoned" ? abandonedTabItems : [];
+  const siteItems = issues.filter((i) => i.site === site);
+  const snoozedItems = siteItems.filter((i) => i.status === "snoozed");
+  const activeSiteItems = siteItems.filter((i) => i.status !== "snoozed" && i.status !== "resolved");
+  const issuesActiveCount = activeSiteItems.filter((i) => !isAbandonedAlert(i)).length;
+  const abandonedActiveCount = activeSiteItems.filter(isAbandonedAlert).length;
+
+  const scoped = siteItems.filter((i) => i.status !== "snoozed" && (scope === "issues" ? !isAbandonedAlert(i) : isAbandonedAlert(i)));
 
   const byColumn: Record<ColumnKey, IssueRow[]> = {
-    open: boardItems.filter((i) => i.status === "open"),
-    acknowledged: boardItems.filter((i) => i.status === "acknowledged"),
+    open: scoped.filter((i) => i.status === "open"),
+    acknowledged: scoped.filter((i) => i.status === "acknowledged"),
+    done: scoped.filter((i) => i.status === "resolved"),
   };
 
   async function handleDrop(column: (typeof COLUMNS)[number]) {
@@ -44,46 +45,22 @@ export function IssuesBoard({ issues, onAction, onSelect }: { issues: IssueRow[]
     if (draggingId == null) return;
     const issue = issues.find((i) => i.id === draggingId);
     setDraggingId(null);
-    if (!issue || issue.status === column.key) return;
+    if (!issue || issue.status === column.status) return;
     await onAction(issue.id, column.dropAction);
   }
 
   return (
     <div>
-      <div className="font-mono" style={{ display: "inline-flex", gap: 3, background: "var(--surface-alt)", padding: 4, borderRadius: 8, border: "1px solid var(--border)", marginBottom: 14 }}>
-        {(["all", "retail", "wholesale"] as SiteFilter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setSiteFilter(f)}
-            style={{
-              border: "none",
-              background: siteFilter === f ? (f === "wholesale" ? "var(--magenta)" : "var(--accent)") : "transparent",
-              color: siteFilter === f ? (f === "wholesale" ? "var(--on-magenta)" : "var(--on-accent)") : "var(--text-soft)",
-              padding: "6px 13px",
-              borderRadius: 6,
-              fontSize: 10.5,
-              textTransform: "uppercase",
-              letterSpacing: 0.8,
-              cursor: "pointer",
-              fontWeight: siteFilter === f ? 600 : 400,
-            }}
-          >
-            {f === "all" ? "All" : f === "retail" ? "Shopify" : "Odoo"}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 14, alignItems: "flex-end" }}>
         {([
-          { key: "issues" as const, label: "Issues", tone: "red" as const, count: issuesTabItems.length },
-          { key: "abandoned" as const, label: "Abandoned", tone: "yellow" as const, count: abandonedTabItems.length },
-          { key: "done" as const, label: "Done", tone: "cyan" as const, count: doneItems.length },
+          { key: "retail" as const, label: "Shopify", tone: "cyan" as const },
+          { key: "wholesale" as const, label: "Odoo", tone: "magenta" as const },
         ]).map((t) => {
-          const active = t.key === subTab;
+          const active = t.key === site;
           return (
             <button
               key={t.key}
-              onClick={() => setSubTab(t.key)}
+              onClick={() => setSite(t.key)}
               className="font-mono"
               style={{
                 ...toneVars(t.tone),
@@ -99,10 +76,33 @@ export function IssuesBoard({ issues, onAction, onSelect }: { issues: IssueRow[]
                 fontWeight: active ? 600 : 400,
               } as React.CSSProperties}
             >
-              {t.label} ({t.count})
+              {t.label}
             </button>
           );
         })}
+
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value as Scope)}
+          className="font-mono"
+          style={{
+            ...toneVars(scope === "issues" ? "red" : "yellow"),
+            border: "1px solid var(--border-strong)",
+            background: "var(--surface)",
+            color: "var(--text)",
+            padding: "8px 12px",
+            borderRadius: "10px 10px 0 0",
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+            cursor: "pointer",
+            fontWeight: 600,
+            marginLeft: "auto",
+          }}
+        >
+          <option value="issues">Issues ({issuesActiveCount})</option>
+          <option value="abandoned">Abandoned ({abandonedActiveCount})</option>
+        </select>
       </div>
 
       {snoozedItems.length > 0 && (
@@ -111,22 +111,8 @@ export function IssuesBoard({ issues, onAction, onSelect }: { issues: IssueRow[]
         </p>
       )}
 
-      <div style={{ ...toneVars(subTab === "issues" ? "red" : subTab === "abandoned" ? "yellow" : "cyan"), border: "1px solid var(--border-strong)", borderRadius: "0 12px 12px 12px", background: "var(--surface)", padding: 20 } as React.CSSProperties}>
-        {subTab === "done" ? (
-          <DataTable
-            emptyText="Nothing resolved yet for this filter."
-            rows={doneItems}
-            onRowClick={onSelect}
-            columns={[
-              { header: "Severity", render: (i) => <Badge variant="severity">{i.severity}</Badge> },
-              { header: "Category", render: (i) => i.category },
-              { header: "Title", render: (i) => i.title },
-              { header: "Site", render: (i) => (i.site === "wholesale" ? "Odoo" : "Shopify") },
-              { header: "Last Detected", render: (i) => new Date(i.last_detected).toLocaleDateString() },
-            ]}
-          />
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14 }}>
+      <div style={{ ...toneVars(scope === "issues" ? "red" : "yellow"), border: "1px solid var(--border-strong)", borderRadius: 12, background: "var(--surface)", padding: 20 } as React.CSSProperties}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
             {COLUMNS.map((col) => (
               <div
                 key={col.key}
@@ -186,13 +172,11 @@ export function IssuesBoard({ issues, onAction, onSelect }: { issues: IssueRow[]
                           opacity: draggingId === issue.id ? 0.4 : 1,
                         }}
                       >
-                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                          <Badge variant="severity">{issue.severity}</Badge>
-                          <span style={{ fontSize: 11, color: "var(--text-soft)", textTransform: "capitalize" }}>{issue.category}</span>
-                        </div>
+                        <Badge variant="severity">{issue.severity}</Badge>
                         <div style={{ fontWeight: 500, fontSize: 13.5, lineHeight: 1.4 }}>{issue.title}</div>
                         <div style={{ fontSize: 11, color: "var(--text-soft)" }}>
-                          seen {issue.frequency}× · last {new Date(issue.last_detected).toLocaleDateString()}
+                          <span style={{ textTransform: "capitalize" }}>{issue.category}</span> · seen {issue.frequency}× · last{" "}
+                          {new Date(issue.last_detected).toLocaleDateString()}
                         </div>
                       </div>
                     ))
@@ -200,8 +184,7 @@ export function IssuesBoard({ issues, onAction, onSelect }: { issues: IssueRow[]
                 </div>
               </div>
             ))}
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
