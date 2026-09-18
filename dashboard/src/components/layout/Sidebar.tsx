@@ -11,7 +11,7 @@ interface NavItem {
 const ISSUES: NavItem = { href: "/", label: "Issues", enabled: true };
 
 const BUSINESS_AND_MARKETING: NavItem[] = [
-  { href: "/business", label: "Business Data", enabled: false },
+  { href: "/business", label: "Business Data", enabled: true },
   { href: "/marketing/email", label: "Email Marketing", enabled: false },
   { href: "/marketing/journey", label: "Customer Journey", enabled: false },
   { href: "/marketing/social", label: "Social Media", enabled: false },
