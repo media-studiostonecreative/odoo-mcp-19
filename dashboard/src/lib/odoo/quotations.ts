@@ -1,6 +1,7 @@
 import "server-only";
 
 import { readOdoo } from "./client";
+import type { DateRange } from "./periods";
 
 /**
  * Open Odoo quotations WITH state, so callers can tell "not yet sent"
@@ -24,6 +25,19 @@ const ORDER_FIELDS = ["name", "amount_total", "currency_rate", "date_order", "pa
 export async function fetchOpenQuotations(limit = 10_000): Promise<SaleOrderWithState[]> {
   return readOdoo<SaleOrderWithState[]>("sale.order", "search_read", {
     domain: [["state", "in", ["draft", "sent"]]],
+    fields: ORDER_FIELDS,
+    limit,
+  });
+}
+
+/** Won (state=sale) or lost (state=cancel) quotations whose date_order falls inside `range`. */
+export async function fetchResolvedQuotations(range: DateRange, limit = 10_000): Promise<SaleOrderWithState[]> {
+  return readOdoo<SaleOrderWithState[]>("sale.order", "search_read", {
+    domain: [
+      ["state", "in", ["sale", "cancel"]],
+      ["date_order", ">=", range.startISO],
+      ["date_order", "<", range.endISO],
+    ],
     fields: ORDER_FIELDS,
     limit,
   });
