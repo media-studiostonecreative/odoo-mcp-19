@@ -25,6 +25,18 @@ function fingerprintOrder(kind: "not_sent" | "abandoned", name: string): string 
   return createHash("sha1").update(`odoo-order-alert|${kind}|${name}`).digest("hex").slice(0, 16);
 }
 
+/**
+ * Upserts an issue per stale quotation and auto-resolves ones that moved on
+ * (sent, confirmed, or cancelled since the last check). Called as a side
+ * effect of loading Odoo business data — same pattern as quickScan's
+ * generateIssuesFromScan and auditImport's issue sync.
+ *
+ * IMPORTANT: `openQuotations` must be the complete current set (e.g. the
+ * full, unfiltered result of `fetchOpenQuotations()`), not a filtered or
+ * paginated subset — auto-resolve treats "fingerprint not present in this
+ * call's list" as "no longer stale," so a partial list would incorrectly
+ * resolve still-stale orders that simply weren't included in the call.
+ */
 export function generateOdooOrderAlerts(openQuotations: SaleOrderWithState[], now: Date = new Date()): void {
   const db = getHealthDb();
 
