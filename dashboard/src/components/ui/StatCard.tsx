@@ -32,7 +32,23 @@ function RadialGauge({ value, size = 56, strokeWidth = 6 }: { value: number; siz
   );
 }
 
-export function StatCard({ label, value, gauge }: { label: string; value: string; gauge?: number }) {
+const DELTA_COLORS: Record<"positive" | "negative" | "neutral", string> = {
+  positive: "var(--positive)",
+  negative: "var(--negative)",
+  neutral: "var(--text-soft)",
+};
+
+export function StatCard({
+  label,
+  value,
+  gauge,
+  delta,
+}: {
+  label: string;
+  value: string;
+  gauge?: number;
+  delta?: { text: string; tone: "positive" | "negative" | "neutral" };
+}) {
   return (
     <div className="bracket-panel" style={{ padding: "18px 20px", display: "flex", alignItems: "center", gap: gauge != null ? 16 : 0 }}>
       {gauge != null && <RadialGauge value={gauge} />}
@@ -43,6 +59,11 @@ export function StatCard({ label, value, gauge }: { label: string; value: string
         <div className="font-display" style={{ fontSize: 26, fontWeight: 500, color: "var(--text)" }}>
           {value}
         </div>
+        {delta && (
+          <div className="font-mono" style={{ fontSize: 11, color: DELTA_COLORS[delta.tone], marginTop: 4 }}>
+            {delta.text}
+          </div>
+        )}
       </div>
     </div>
   );
