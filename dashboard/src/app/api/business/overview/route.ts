@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolvePeriod, resolveCustomPeriod, type PeriodKey } from "@/lib/odoo/periods";
 import { fetchResolvedQuotations } from "@/lib/odoo/quotations";
 import { summarizeConversion, compareConversion } from "@/lib/odoo/conversion";
+import { listIssues } from "@/lib/issues/store";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,8 @@ export async function GET(request: NextRequest) {
       fetchResolvedQuotations(periodRange.previous),
     ]);
     const comparison = compareConversion(summarizeConversion(currentOrders), summarizeConversion(previousOrders));
-    return NextResponse.json({ label: periodRange.label, ...comparison });
+    const abandonedCount = listIssues({ status: "active", category: "business", site: "wholesale" }).length;
+    return NextResponse.json({ label: periodRange.label, ...comparison, abandonedCount });
   } catch (error) {
     console.error("[website-health] failed to load business overview:", error);
     return NextResponse.json({ error: "Unable to load business data from Odoo." }, { status: 500 });

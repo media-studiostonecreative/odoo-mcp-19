@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Page } from "@/components/ui/Page";
 import { StatCard } from "@/components/ui/StatCard";
 import { formatCurrency } from "@/lib/format";
@@ -24,6 +25,7 @@ interface OverviewResponse {
   winRateDelta: number;
   dropRateDelta: number;
   revenueDelta: number;
+  abandonedCount: number;
 }
 
 function addOneDayISO(iso: string): string {
@@ -164,9 +166,17 @@ export default function BusinessDataPage() {
 
       {data && (
         <>
-          <p style={{ color: "var(--text-soft)", fontSize: 12, marginBottom: 14 }}>
-            {period === "custom" ? `${customStart} to ${customEnd}` : data.label}
-          </p>
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ color: "var(--text-soft)", fontSize: 12 }}>{period === "custom" ? `${customStart} to ${customEnd}` : data.label}</p>
+            {data.abandonedCount > 0 && (
+              <p className="font-mono" style={{ color: "var(--warning)", fontSize: 11, marginTop: 4 }}>
+                ⚠ {data.abandonedCount} stale {data.abandonedCount === 1 ? "quotation" : "quotations"} may be depressing this rate —{" "}
+                <Link href="/" style={{ color: "var(--warning)", textDecoration: "underline" }}>
+                  view in Issues
+                </Link>
+              </p>
+            )}
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14 }}>
             <StatCard
               label="Win Rate"
