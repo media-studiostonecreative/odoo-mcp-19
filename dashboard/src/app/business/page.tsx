@@ -1,11 +1,12 @@
 // dashboard/src/app/business/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { Page } from "@/components/ui/Page";
 import { StatCard } from "@/components/ui/StatCard";
 import { formatCurrency } from "@/lib/format";
+import { StaleQuotationsBoard } from "@/components/business/StaleQuotationsBoard";
+import { IssueDrawer, type IssueRow, type AlertAction } from "@/components/issues/IssueDrawer";
 
 type PeriodKey = "month" | "quarter" | "ytd" | "12months" | "custom";
 
@@ -25,7 +26,6 @@ interface OverviewResponse {
   winRateDelta: number;
   dropRateDelta: number;
   revenueDelta: number;
-  abandonedCount: number;
 }
 
 function addOneDayISO(iso: string): string {
@@ -53,6 +53,30 @@ export default function BusinessDataPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
+  const [staleQuotations, setStaleQuotations] = useState<IssueRow[]>([]);
+  const [selected, setSelected] = useState<IssueRow | null>(null);
+
+  const loadStaleQuotations = useCallback(async () => {
+    const res = await fetch("/api/issues?category=business&site=wholesale", { cache: "no-store" });
+    if (res.ok) setStaleQuotations((await res.json()).issues);
+  }, []);
+
+  useEffect(() => {
+    loadStaleQuotations();
+  }, [loadStaleQuotations]);
+
+  async function handleQuotationAction(issueId: number, action: AlertAction) {
+    const res = await fetch(`/api/issues/${issueId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    if (res.ok) {
+      const { issue } = await res.json();
+      setStaleQuotations((prev) => prev.map((i) => (i.id === issue.id ? issue : i)));
+      setSelected(null);
+    }
+  }
 
   useEffect(() => {
     if (period === "custom" && (!customStart || !customEnd)) {
@@ -166,17 +190,7 @@ export default function BusinessDataPage() {
 
       {data && (
         <>
-          <div style={{ marginBottom: 14 }}>
-            <p style={{ color: "var(--text-soft)", fontSize: 12 }}>{period === "custom" ? `${customStart} to ${customEnd}` : data.label}</p>
-            {data.abandonedCount > 0 && (
-              <p className="font-mono" style={{ color: "var(--warning)", fontSize: 11, marginTop: 4 }}>
-                ⚠ {data.abandonedCount} stale {data.abandonedCount === 1 ? "quotation" : "quotations"} may be depressing this rate —{" "}
-                <Link href="/" style={{ color: "var(--warning)", textDecoration: "underline" }}>
-                  view in Issues
-                </Link>
-              </p>
-            )}
-          </div>
+          <p style={{ color: "var(--text-soft)", fontSize: 12, marginBottom: 14 }}>{period === "custom" ? `${customStart} to ${customEnd}` : data.label}</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14 }}>
             <StatCard
               label="Win Rate"
@@ -205,6 +219,15 @@ export default function BusinessDataPage() {
           </div>
         </>
       )}
+
+      <div style={{ marginTop: 28 }}>
+        <h2 className="font-display" style={{ fontSize: 16, fontWeight: 500, marginBottom: 12 }}>
+          Stale Quotations
+        </h2>
+        <StaleQuotationsBoard issues={staleQuotations} onAction={handleQuotationAction} onSelect={setSelected} />
+      </div>
+
+      {selected && <IssueDrawer issue={selected} onClose={() => setSelected(null)} onAction={handleQuotationAction} />}
     </Page>
   );
 }

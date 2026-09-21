@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 interface NavItem {
   href: string;
@@ -12,9 +13,9 @@ const ISSUES: NavItem = { href: "/", label: "Issues", enabled: true };
 
 const BUSINESS_AND_MARKETING: NavItem[] = [
   { href: "/business", label: "Business Data", enabled: true },
-  { href: "/marketing/email", label: "Email Marketing", enabled: false },
-  { href: "/marketing/journey", label: "Customer Journey", enabled: false },
-  { href: "/marketing/social", label: "Social Media", enabled: false },
+  { href: "/marketing/email", label: "Email Marketing", enabled: true },
+  { href: "/marketing/journey", label: "Customer Journey", enabled: true },
+  { href: "/marketing/social", label: "Social Media", enabled: true },
 ];
 
 const TOOLS: NavItem[] = [
@@ -38,9 +39,9 @@ function NavLink({ item }: { item: NavItem }) {
     return <span style={style}>{item.label}</span>;
   }
   return (
-    <a href={item.href} style={{ ...style, background: "var(--surface-alt)" }}>
+    <Link href={item.href} style={{ ...style, background: "var(--surface-alt)" }}>
       {item.label}
-    </a>
+    </Link>
   );
 }
 

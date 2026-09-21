@@ -128,4 +128,33 @@ CREATE TABLE IF NOT EXISTS content_findings (
 );
 CREATE INDEX IF NOT EXISTS idx_findings_fingerprint ON content_findings(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_findings_audit ON content_findings(audit_import_id);
+
+CREATE TABLE IF NOT EXISTS email_campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sent_date TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  recipients INTEGER NOT NULL DEFAULT 0,
+  opens INTEGER NOT NULL DEFAULT 0,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  revenue REAL NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_email_campaigns_date ON email_campaigns(sent_date);
+
+CREATE TABLE IF NOT EXISTS social_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  posted_date TEXT NOT NULL,
+  platform TEXT NOT NULL CHECK(platform IN ('instagram','facebook','tiktok','pinterest')),
+  post_type TEXT,
+  caption TEXT,
+  likes INTEGER NOT NULL DEFAULT 0,
+  comments INTEGER NOT NULL DEFAULT 0,
+  shares INTEGER NOT NULL DEFAULT 0,
+  link_clicks INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_social_posts_date ON social_posts(posted_date);
+CREATE INDEX IF NOT EXISTS idx_social_posts_platform ON social_posts(platform);
 `;
