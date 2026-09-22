@@ -16,6 +16,10 @@ export interface SocialPost {
   shares: number;
   link_clicks: number;
   notes: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  revenue_attributed: number;
   created_at: string;
 }
 
@@ -29,6 +33,10 @@ export interface NewSocialPost {
   shares: number;
   link_clicks: number;
   notes?: string | null;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  revenue_attributed?: number;
 }
 
 export function listSocialPosts(platform?: SocialPlatform): SocialPost[] {
@@ -43,10 +51,19 @@ export function createSocialPost(data: NewSocialPost): SocialPost {
   const db = getHealthDb();
   const result = db
     .prepare(
-      `INSERT INTO social_posts (posted_date, platform, post_type, caption, likes, comments, shares, link_clicks, notes)
-       VALUES (@posted_date, @platform, @post_type, @caption, @likes, @comments, @shares, @link_clicks, @notes)`,
+      `INSERT INTO social_posts (posted_date, platform, post_type, caption, likes, comments, shares, link_clicks, notes, utm_source, utm_medium, utm_campaign, revenue_attributed)
+       VALUES (@posted_date, @platform, @post_type, @caption, @likes, @comments, @shares, @link_clicks, @notes, @utm_source, @utm_medium, @utm_campaign, @revenue_attributed)`,
     )
-    .run({ ...data, post_type: data.post_type ?? null, caption: data.caption ?? null, notes: data.notes ?? null });
+    .run({
+      ...data,
+      post_type: data.post_type ?? null,
+      caption: data.caption ?? null,
+      notes: data.notes ?? null,
+      utm_source: data.utm_source ?? null,
+      utm_medium: data.utm_medium ?? null,
+      utm_campaign: data.utm_campaign ?? null,
+      revenue_attributed: data.revenue_attributed ?? 0,
+    });
   return db.prepare("SELECT * FROM social_posts WHERE id = ?").get(result.lastInsertRowid) as SocialPost;
 }
 

@@ -156,3 +156,128 @@ export async function fetchEmailEngagements(): Promise<EmailEngagementResult> {
 
   return { configured: true, rows };
 }
+
+export interface CampaignAttributionRow {
+  utmCampaign: string;
+  utmSource: string;
+  utmMedium: string;
+  sessions: number;
+  conversionRate: number; // 0-1 fraction
+  orders: number;
+  sales: number;
+  averageOrderValue: number;
+}
+
+/**
+ * Two ShopifyQL queries (`campaign_sessions` and `campaign_sales` — there is no single
+ * dataset with both traffic and sales columns) joined client-side on
+ * (utm_campaign, utm_source, utm_medium). Column names verified against shopify.dev's
+ * published schema reference (shopify.dev/docs/api/shopifyql/latest/schemas/marketing/…)
+ * and confirmed live on 2026-09-22: both queries parse and return real (if currently
+ * empty) results for Studiostone's store — this store has run no UTM-tagged campaigns
+ * yet, so an empty result here is accurate, not a bug. `campaign_last_click_*` is used
+ * (not first-click/linear) to match the attribution model Shopify's own Marketing
+ * dashboard shows by default.
+ */
+const CAMPAIGN_SESSIONS_QUERY = `
+  FROM campaign_sessions
+  SHOW utm_campaign, utm_source, utm_medium, campaign_sessions, campaign_conversion_rate
+  GROUP BY utm_campaign, utm_source, utm_medium
+  SINCE -180d
+  UNTIL today
+  ORDER BY campaign_sessions DESC
+  LIMIT 50
+`;
+
+const CAMPAIGN_SALES_QUERY = `
+  FROM campaign_sales
+  SHOW utm_campaign, utm_source, utm_medium, campaign_last_click_order_count, campaign_last_click_total_sales, campaign_last_click_total_average_order_value
+  GROUP BY utm_campaign, utm_source, utm_medium
+  SINCE -180d
+  UNTIL today
+  ORDER BY campaign_last_click_total_sales DESC
+  LIMIT 50
+`;
+
+interface CampaignSessionsQLResponse {
+  shopifyqlQuery: { tableData: { rows: Record<string, string>[] } | null; parseErrors: string[] };
+}
+interface CampaignSalesQLResponse {
+  shopifyqlQuery: { tableData: { rows: Record<string, string>[] } | null; parseErrors: string[] };
+}
+
+export interface CampaignAttributionResult {
+  configured: boolean;
+  rows: CampaignAttributionRow[];
+}
+
+function campaignKey(utmCampaign: string, utmSource: string, utmMedium: string): string {
+  return `${utmCampaign} ${utmSource} ${utmMedium}`;
+}
+
+/** UTM-tagged campaign traffic and sales, trailing 180 days, real Shopify data only.
+ * Returns `{configured: false}` when credentials aren't set — never fabricated. An
+ * empty `rows` array is a legitimate result: it means no UTM-tagged sessions or orders
+ * exist in the window, not that the query failed. */
+export async function fetchCampaignAttribution(): Promise<CampaignAttributionResult> {
+  if (!isShopifyConfigured()) return { configured: false, rows: [] };
+
+  const [sessionsData, salesData] = await Promise.all([
+    callShopifyGraphQL<CampaignSessionsQLResponse>(`query {
+      shopifyqlQuery(query: ${JSON.stringify(CAMPAIGN_SESSIONS_QUERY)}) { tableData { rows } parseErrors }
+    }`),
+    callShopifyGraphQL<CampaignSalesQLResponse>(`query {
+      shopifyqlQuery(query: ${JSON.stringify(CAMPAIGN_SALES_QUERY)}) { tableData { rows } parseErrors }
+    }`),
+  ]);
+
+  const sessionsResult = sessionsData.shopifyqlQuery;
+  const salesResult = salesData.shopifyqlQuery;
+  if (sessionsResult.parseErrors.length > 0) {
+    throw new ShopifyRequestError(`ShopifyQL parse error (campaign_sessions): ${sessionsResult.parseErrors.join("; ")}`);
+  }
+  if (salesResult.parseErrors.length > 0) {
+    throw new ShopifyRequestError(`ShopifyQL parse error (campaign_sales): ${salesResult.parseErrors.join("; ")}`);
+  }
+
+  const byKey = new Map<string, CampaignAttributionRow>();
+
+  for (const row of sessionsResult.tableData?.rows ?? []) {
+    const utmCampaign = row.utm_campaign || "(none)";
+    const utmSource = row.utm_source || "(none)";
+    const utmMedium = row.utm_medium || "(none)";
+    byKey.set(campaignKey(utmCampaign, utmSource, utmMedium), {
+      utmCampaign,
+      utmSource,
+      utmMedium,
+      sessions: Number(row.campaign_sessions) || 0,
+      conversionRate: Number(row.campaign_conversion_rate) || 0,
+      orders: 0,
+      sales: 0,
+      averageOrderValue: 0,
+    });
+  }
+
+  for (const row of salesResult.tableData?.rows ?? []) {
+    const utmCampaign = row.utm_campaign || "(none)";
+    const utmSource = row.utm_source || "(none)";
+    const utmMedium = row.utm_medium || "(none)";
+    const key = campaignKey(utmCampaign, utmSource, utmMedium);
+    const existing = byKey.get(key) ?? {
+      utmCampaign,
+      utmSource,
+      utmMedium,
+      sessions: 0,
+      conversionRate: 0,
+      orders: 0,
+      sales: 0,
+      averageOrderValue: 0,
+    };
+    existing.orders = Number(row.campaign_last_click_order_count) || 0;
+    existing.sales = Number(row.campaign_last_click_total_sales) || 0;
+    existing.averageOrderValue = Number(row.campaign_last_click_total_average_order_value) || 0;
+    byKey.set(key, existing);
+  }
+
+  return { configured: true, rows: Array.from(byKey.values()) };
+}

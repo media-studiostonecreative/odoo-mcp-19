@@ -31,7 +31,27 @@ export function getHealthDb(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
+  runMigrations(db);
   return db;
+}
+
+/**
+ * SQLite's `ALTER TABLE ... ADD COLUMN` has no `IF NOT EXISTS` form, so
+ * additive schema changes to a table that may already exist (with data)
+ * are applied here, guarded by a PRAGMA table_info check, rather than
+ * folded into the idempotent CREATE TABLE statements above.
+ */
+function runMigrations(db: Database.Database): void {
+  addColumnIfMissing(db, "social_posts", "utm_source", "TEXT");
+  addColumnIfMissing(db, "social_posts", "utm_medium", "TEXT");
+  addColumnIfMissing(db, "social_posts", "utm_campaign", "TEXT");
+  addColumnIfMissing(db, "social_posts", "revenue_attributed", "REAL NOT NULL DEFAULT 0");
+}
+
+function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (columns.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 export function closeHealthDb(): void {

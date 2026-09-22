@@ -6,7 +6,7 @@ import { Page } from "@/components/ui/Page";
 import { StatCard } from "@/components/ui/StatCard";
 import { Panel } from "@/components/ui/Panel";
 import { DataTable } from "@/components/ui/DataTable";
-import { formatNumber, formatDate } from "@/lib/format";
+import { formatNumber, formatDate, formatCurrency } from "@/lib/format";
 
 type Platform = "instagram" | "facebook" | "tiktok" | "pinterest";
 type PlatformFilter = "all" | Platform;
@@ -21,6 +21,8 @@ interface SocialPost {
   comments: number;
   shares: number;
   link_clicks: number;
+  utm_campaign: string | null;
+  revenue_attributed: number;
 }
 
 const PLATFORMS: Platform[] = ["instagram", "facebook", "tiktok", "pinterest"];
@@ -28,7 +30,20 @@ const PLATFORMS: Platform[] = ["instagram", "facebook", "tiktok", "pinterest"];
 const inputStyle = { background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 10px", fontSize: 12, width: "100%" };
 const labelStyle = { fontSize: 11, color: "var(--text-soft)", textTransform: "uppercase" as const, letterSpacing: 0.5, marginBottom: 4, display: "block" };
 
-const EMPTY_FORM = { posted_date: "", platform: "instagram" as Platform, post_type: "", caption: "", likes: "", comments: "", shares: "", link_clicks: "" };
+const EMPTY_FORM = {
+  posted_date: "",
+  platform: "instagram" as Platform,
+  post_type: "",
+  caption: "",
+  likes: "",
+  comments: "",
+  shares: "",
+  link_clicks: "",
+  utm_source: "",
+  utm_medium: "",
+  utm_campaign: "",
+  revenue_attributed: "",
+};
 
 export default function SocialMediaPage() {
   const [filter, setFilter] = useState<PlatformFilter>("all");
@@ -65,6 +80,10 @@ export default function SocialMediaPage() {
         comments: Number(form.comments) || 0,
         shares: Number(form.shares) || 0,
         link_clicks: Number(form.link_clicks) || 0,
+        utm_source: form.utm_source || null,
+        utm_medium: form.utm_medium || null,
+        utm_campaign: form.utm_campaign || null,
+        revenue_attributed: Number(form.revenue_attributed) || 0,
       }),
     });
     setSaving(false);
@@ -166,6 +185,22 @@ export default function SocialMediaPage() {
               <label style={labelStyle}>Link Clicks</label>
               <input type="number" min={0} value={form.link_clicks} onChange={(e) => setForm({ ...form, link_clicks: e.target.value })} style={inputStyle} />
             </div>
+            <div>
+              <label style={labelStyle}>UTM Campaign</label>
+              <input type="text" placeholder="e.g. fall-launch" value={form.utm_campaign} onChange={(e) => setForm({ ...form, utm_campaign: e.target.value })} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>UTM Source</label>
+              <input type="text" placeholder="e.g. instagram" value={form.utm_source} onChange={(e) => setForm({ ...form, utm_source: e.target.value })} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>UTM Medium</label>
+              <input type="text" placeholder="organic-social" value={form.utm_medium} onChange={(e) => setForm({ ...form, utm_medium: e.target.value })} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Revenue Attributed</label>
+              <input type="number" min={0} step="0.01" value={form.revenue_attributed} onChange={(e) => setForm({ ...form, revenue_attributed: e.target.value })} style={inputStyle} />
+            </div>
             <div style={{ display: "flex", alignItems: "flex-end" }}>
               <button
                 type="submit"
@@ -193,6 +228,8 @@ export default function SocialMediaPage() {
               { header: "Comments", render: (p) => formatNumber(p.comments), align: "right" },
               { header: "Shares", render: (p) => formatNumber(p.shares), align: "right" },
               { header: "Clicks", render: (p) => formatNumber(p.link_clicks), align: "right" },
+              { header: "UTM Campaign", render: (p) => p.utm_campaign ?? "—" },
+              { header: "Revenue", render: (p) => (p.revenue_attributed > 0 ? formatCurrency(p.revenue_attributed) : "—"), align: "right" },
               {
                 header: "",
                 render: (p) => (

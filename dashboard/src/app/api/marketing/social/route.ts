@@ -31,6 +31,10 @@ export async function POST(request: NextRequest) {
       shares: Number(body.shares) || 0,
       link_clicks: Number(body.link_clicks) || 0,
       notes: body.notes ?? null,
+      utm_source: body.utm_source ?? null,
+      utm_medium: body.utm_medium ?? null,
+      utm_campaign: body.utm_campaign ?? null,
+      revenue_attributed: Number(body.revenue_attributed) || 0,
     });
     return NextResponse.json({ post }, { status: 201 });
   } catch (error) {

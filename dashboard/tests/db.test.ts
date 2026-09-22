@@ -42,4 +42,20 @@ describe("getHealthDb", () => {
     const { getHealthDb } = await import("@/lib/db");
     expect(getHealthDb()).toBe(getHealthDb());
   });
+
+  it("migrates UTM and revenue-attribution columns onto social_posts", async () => {
+    const { getHealthDb } = await import("@/lib/db");
+    const db = getHealthDb();
+    const columns = (db.prepare("PRAGMA table_info(social_posts)").all() as { name: string }[]).map((c) => c.name);
+    for (const expected of ["utm_source", "utm_medium", "utm_campaign", "revenue_attributed"]) {
+      expect(columns).toContain(expected);
+    }
+  });
+
+  it("re-running the migration on an already-migrated database does not throw", async () => {
+    const { getHealthDb, closeHealthDb } = await import("@/lib/db");
+    getHealthDb();
+    closeHealthDb();
+    expect(() => getHealthDb()).not.toThrow();
+  });
 });
