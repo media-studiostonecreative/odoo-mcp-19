@@ -191,4 +191,29 @@ CREATE TABLE IF NOT EXISTS critical_facts (
   notes TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Social & Conversion Intelligence, Phase 2: manually-logged trend research.
+-- Every factor is a person's own 0-100 judgment call, not a live trend-provider
+-- metric -- there is no Google Trends/Pinterest Trends/TikTok Creative Center
+-- integration yet (Phase 3, gated on API access this project doesn't have).
+-- Column names mirror the 7-factor Trend Fit Score model documented in the
+-- studiostone-social-conversion-analyst skill's references/scoring-models.md;
+-- keep them in sync if that model's factors ever change.
+CREATE TABLE IF NOT EXISTS trend_observations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  term TEXT NOT NULL,
+  platform TEXT,
+  observed_date TEXT NOT NULL,
+  product_relevance INTEGER NOT NULL CHECK(product_relevance BETWEEN 0 AND 100),
+  commercial_intent INTEGER NOT NULL CHECK(commercial_intent BETWEEN 0 AND 100),
+  regional_momentum INTEGER NOT NULL CHECK(regional_momentum BETWEEN 0 AND 100),
+  historical_performance INTEGER NOT NULL CHECK(historical_performance BETWEEN 0 AND 100),
+  seasonality_timing INTEGER NOT NULL CHECK(seasonality_timing BETWEEN 0 AND 100),
+  content_suitability INTEGER NOT NULL CHECK(content_suitability BETWEEN 0 AND 100),
+  inventory_availability INTEGER NOT NULL CHECK(inventory_availability BETWEEN 0 AND 100),
+  note TEXT,
+  source_url TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_trend_observations_date ON trend_observations(observed_date);
 `;
