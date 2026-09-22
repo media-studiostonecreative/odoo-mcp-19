@@ -259,4 +259,51 @@ CREATE TABLE IF NOT EXISTS social_platform_insights (
   UNIQUE(platform, metric, period_start, period_end)
 );
 CREATE INDEX IF NOT EXISTS idx_social_platform_insights_period ON social_platform_insights(period_start, period_end);
+
+-- Content ideas (repost/refresh/new) for the Social Media workflow, authored by
+-- Claude acting as the studiostone-social-conversion-analyst skill against real
+-- performance (social_posts) and real Shopify inventory data -- never a live
+-- LLM call at runtime, and never fabricated performance/trend numbers. An idea
+-- can optionally reference the real post it's a repost/refresh of, and/or a
+-- real upcoming occasion (lib/social/seasonalCalendar.ts) it's timed for.
+-- occasion_id is a plain string key from that static list, not a DB foreign
+-- key, since occasions are computed rather than stored rows.
+CREATE TABLE IF NOT EXISTS content_ideas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  idea_type TEXT NOT NULL CHECK(idea_type IN ('repost','refresh','new')),
+  source_post_id INTEGER REFERENCES social_posts(id) ON DELETE SET NULL,
+  occasion_id TEXT,
+  target_date TEXT,
+  platform TEXT NOT NULL CHECK(platform IN ('instagram','facebook','tiktok','pinterest')),
+  product TEXT NOT NULL,
+  product_handle TEXT,
+  pillar TEXT,
+  hook TEXT,
+  caption TEXT NOT NULL,
+  hashtags TEXT,
+  cta TEXT,
+  reasoning TEXT NOT NULL,
+  confidence TEXT NOT NULL CHECK(confidence IN ('high','promising','experimental','insufficient')),
+  inventory_verified INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'suggested' CHECK(status IN ('suggested','approved','used','dismissed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_content_ideas_status ON content_ideas(status);
+CREATE INDEX IF NOT EXISTS idx_content_ideas_target_date ON content_ideas(target_date);
+
+-- Trade shows Studiostone is actually attending -- distinct from
+-- lib/social/seasonalCalendar.ts's universal, code-computed retail dates
+-- (Halloween, Black Friday, ...). This calendar is this specific business's
+-- travel/exhibition schedule, so it's user-entered data in the DB rather than
+-- hardcoded, the same way critical_facts and trend_observations are.
+CREATE TABLE IF NOT EXISTS trade_shows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  location TEXT,
+  start_date TEXT NOT NULL,
+  end_date TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_trade_shows_start_date ON trade_shows(start_date);
 `;

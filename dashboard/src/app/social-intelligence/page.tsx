@@ -12,6 +12,8 @@ import { buildUtmUrl, UTM_SOURCES, UTM_MEDIUMS, InvalidUtmUrlError, type UtmSour
 import { scoreTrendFit, hedgeForClassification, type TrendFactors } from "@/lib/social/trendScore";
 import { TREND_PROVIDERS } from "@/lib/social/trendProviders";
 import { evaluateLearningLoopOutcome } from "@/lib/social/learningLoopOutcome";
+import type { HashtagEntry, ContentIdeaType, ContentIdeaConfidence, ContentIdeaStatus } from "@/lib/social/contentIdeas";
+import type { SeasonalOccasion } from "@/lib/social/seasonalCalendar";
 
 type Platform = "instagram" | "facebook" | "tiktok" | "pinterest";
 
@@ -415,6 +417,320 @@ function TrendObservationForm({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+interface ContentIdea {
+  id: number;
+  idea_type: ContentIdeaType;
+  source_post_id: number | null;
+  occasion_id: string | null;
+  target_date: string | null;
+  platform: string;
+  product: string;
+  product_handle: string | null;
+  pillar: string | null;
+  hook: string | null;
+  caption: string;
+  hashtags: HashtagEntry[];
+  cta: string | null;
+  reasoning: string;
+  confidence: ContentIdeaConfidence;
+  inventory_verified: boolean;
+  status: ContentIdeaStatus;
+}
+
+const IDEA_TYPE_LABEL: Record<ContentIdeaType, string> = { repost: "Repost", refresh: "Refresh", new: "New" };
+const IDEA_STATUS_ACTIONS: { status: ContentIdeaStatus; label: string }[] = [
+  { status: "approved", label: "Approve" },
+  { status: "used", label: "Mark Used" },
+  { status: "dismissed", label: "Dismiss" },
+];
+
+function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]; loading: boolean; onChanged: () => void }) {
+  async function handleStatus(id: number, status: ContentIdeaStatus) {
+    await fetch(`/api/social-intelligence/content-ideas/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    onChanged();
+  }
+
+  async function handleDelete(id: number) {
+    await fetch(`/api/social-intelligence/content-ideas/${id}`, { method: "DELETE" });
+    onChanged();
+  }
+
+  const active = ideas.filter((i) => i.status !== "dismissed" && i.status !== "used");
+
+  return (
+    <Panel title="Content Ideas">
+      <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
+        Repost/refresh/new content ideas, written by asking Claude to act as a social media specialist against real post performance and
+        real Shopify inventory — not a live, on-demand AI generator wired into this button. Ask for more anytime and they&apos;ll appear
+        here for review.
+      </p>
+      {loading ? (
+        <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+      ) : active.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--text-soft)" }}>No open content ideas — ask Claude to generate some.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {active.map((idea) => (
+            <div key={idea.id} className="bracket-panel" style={{ padding: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <Badge variant="outline">{IDEA_TYPE_LABEL[idea.idea_type]}</Badge>
+                  <strong style={{ fontSize: 14, marginLeft: 8 }}>{idea.product}</strong>
+                  <span style={{ color: "var(--text-soft)", fontSize: 12, marginLeft: 8, textTransform: "capitalize" }}>{idea.platform}</span>
+                  {!idea.inventory_verified && (
+                    <span style={{ marginLeft: 8 }}>
+                      <Badge variant="outline">Inventory unverified</Badge>
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <Badge variant={idea.confidence === "high" ? "neutral" : "outline"}>{CONFIDENCE_LABEL[idea.confidence]}</Badge>
+                  {idea.target_date && <span className="font-mono" style={{ fontSize: 11, color: "var(--text-soft)" }}>{formatDate(idea.target_date)}</span>}
+                </div>
+              </div>
+              {idea.hook && <p style={{ fontSize: 13, fontStyle: "italic", margin: "0 0 6px" }}>&quot;{idea.hook}&quot;</p>}
+              <p style={{ fontSize: 13, margin: "0 0 8px", lineHeight: 1.5 }}>{idea.caption}</p>
+              {idea.hashtags.length > 0 && (
+                <p style={{ fontSize: 12, color: "var(--text-soft)", margin: "0 0 8px" }}>
+                  {idea.hashtags.map((h) => h.tag).join(" ")}
+                </p>
+              )}
+              {idea.cta && (
+                <p style={{ fontSize: 12, margin: "0 0 8px" }}>
+                  <strong>CTA:</strong> {idea.cta}
+                </p>
+              )}
+              <p style={{ fontSize: 12, color: "var(--text-soft)", margin: "0 0 10px", lineHeight: 1.5 }}>{idea.reasoning}</p>
+              <div style={{ display: "flex", gap: 8 }}>
+                {IDEA_STATUS_ACTIONS.map((a) => (
+                  <button
+                    key={a.status}
+                    type="button"
+                    onClick={() => handleStatus(idea.id, a.status)}
+                    className="font-mono"
+                    style={{ border: "1px solid var(--border)", background: "none", color: "var(--text)", padding: "5px 10px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => handleDelete(idea.id)}
+                  className="font-mono"
+                  style={{ border: "none", background: "transparent", color: "var(--negative)", fontSize: 11, cursor: "pointer" }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+interface TradeShow {
+  id: number;
+  name: string;
+  location: string | null;
+  start_date: string;
+  end_date: string | null;
+  notes: string | null;
+}
+
+interface ContentIdeaLite {
+  id: number;
+  idea_type: ContentIdeaType;
+  target_date: string | null;
+  product: string;
+  platform: string;
+  status: ContentIdeaStatus;
+}
+
+type CalendarEntryType = "occasion" | "trade-show" | "content-idea";
+
+interface CalendarEntry {
+  key: string;
+  type: CalendarEntryType;
+  date: string;
+  label: string;
+  detail: string;
+}
+
+const CALENDAR_TYPE_LABEL: Record<CalendarEntryType, string> = { occasion: "Occasion", "trade-show": "Trade Show", "content-idea": "Content Idea" };
+
+function daysUntil(dateIso: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${dateIso}T00:00:00`);
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+const EMPTY_TRADE_SHOW_FORM = { name: "", location: "", start_date: "", end_date: "", notes: "" };
+
+function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[] }) {
+  const [occasions, setOccasions] = useState<SeasonalOccasion[]>([]);
+  const [tradeShows, setTradeShows] = useState<TradeShow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(EMPTY_TRADE_SHOW_FORM);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    const [occRes, showsRes] = await Promise.all([
+      fetch("/api/social-intelligence/occasions", { cache: "no-store" }),
+      fetch("/api/social-intelligence/trade-shows", { cache: "no-store" }),
+    ]);
+    if (occRes.ok) setOccasions((await occRes.json()).occasions);
+    if (showsRes.ok) setTradeShows((await showsRes.json()).tradeShows);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleAddTradeShow(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    await fetch("/api/social-intelligence/trade-shows", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: form.name,
+        location: form.location || null,
+        start_date: form.start_date,
+        end_date: form.end_date || null,
+        notes: form.notes || null,
+      }),
+    });
+    setSaving(false);
+    setForm(EMPTY_TRADE_SHOW_FORM);
+    setShowForm(false);
+    load();
+  }
+
+  async function handleDeleteTradeShow(id: number) {
+    await fetch(`/api/social-intelligence/trade-shows/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  const entries: CalendarEntry[] = useMemo(() => {
+    const occasionEntries: CalendarEntry[] = occasions.map((o) => ({
+      key: `occasion-${o.id}`,
+      type: "occasion",
+      date: o.date,
+      label: o.name,
+      detail: `Suggested post-by ${formatDate(o.suggestedPostByDate)} · ${o.note}`,
+    }));
+    const tradeShowEntries: CalendarEntry[] = tradeShows.map((t) => ({
+      key: `trade-show-${t.id}`,
+      type: "trade-show",
+      date: t.start_date,
+      label: t.name,
+      detail: [t.location, t.end_date ? `through ${formatDate(t.end_date)}` : null, t.notes].filter(Boolean).join(" · "),
+    }));
+    const ideaEntries: CalendarEntry[] = contentIdeas
+      .filter((i) => i.target_date)
+      .map((i) => ({
+        key: `content-idea-${i.id}`,
+        type: "content-idea",
+        date: i.target_date!,
+        label: `${i.product} (${i.platform})`,
+        detail: `${i.idea_type} · ${i.status}`,
+      }));
+    return [...occasionEntries, ...tradeShowEntries, ...ideaEntries].sort((a, b) => a.date.localeCompare(b.date));
+  }, [occasions, tradeShows, contentIdeas]);
+
+  return (
+    <Panel
+      title="Content Calendar"
+      headerAction={
+        <button type="button" onClick={() => setShowForm((v) => !v)} className="font-mono" style={{ ...inputStyle, width: "auto", cursor: "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {showForm ? "Cancel" : "+ Add Trade Show"}
+        </button>
+      }
+    >
+      <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
+        Every gifting/sale holiday, trade show, and content idea with a target date, merged into one chronological view — computed
+        holidays (never guessed) plus the trade shows you log below plus any dated content idea from the Content Ideas panel.
+      </p>
+      {showForm && (
+        <form onSubmit={handleAddTradeShow} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16, padding: 16, border: "1px dashed var(--border)", borderRadius: 10 }}>
+          <div>
+            <label style={labelStyle}>Show Name</label>
+            <input type="text" required placeholder="e.g. Circle Craft" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Location</label>
+            <input type="text" placeholder="e.g. Vancouver, BC" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Start Date</label>
+            <input type="date" required value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>End Date</label>
+            <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} style={inputStyle} />
+          </div>
+          <div style={{ gridColumn: "span 2" }}>
+            <label style={labelStyle}>Notes</label>
+            <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} style={inputStyle} />
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <button
+              type="submit"
+              disabled={saving}
+              className="font-mono"
+              style={{ border: "1px solid var(--accent)", background: "var(--accent)", color: "var(--on-accent)", padding: "7px 13px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: saving ? "default" : "pointer", width: "100%" }}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
+      )}
+      {loading ? (
+        <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+      ) : (
+        <DataTable
+          emptyText="Nothing on the calendar."
+          rows={entries}
+          columns={[
+            { header: "Date", render: (e) => formatDate(e.date) },
+            { header: "In", render: (e) => `${daysUntil(e.date)}d`, align: "right" },
+            { header: "Type", render: (e) => <Badge variant="outline">{CALENDAR_TYPE_LABEL[e.type]}</Badge> },
+            { header: "What", render: (e) => e.label },
+            { header: "Detail", render: (e) => <span style={{ color: "var(--text-soft)", fontSize: 12 }}>{e.detail}</span> },
+            {
+              header: "",
+              render: (e) =>
+                e.type === "trade-show" ? (
+                  <button type="button" onClick={() => handleDeleteTradeShow(Number(e.key.replace("trade-show-", "")))} style={{ border: "none", background: "transparent", color: "var(--negative)", cursor: "pointer", fontSize: 12 }}>
+                    Delete
+                  </button>
+                ) : null,
+              align: "right",
+            },
+          ]}
+        />
+      )}
+    </Panel>
+  );
+}
+
+type TabKey = "overview" | "content" | "performance" | "trends";
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "content", label: "Content & Planning" },
+  { key: "performance", label: "Performance" },
+  { key: "trends", label: "Trend Research" },
+];
+
 export default function SocialIntelligencePage() {
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
@@ -424,6 +740,9 @@ export default function SocialIntelligencePage() {
   const [observationsLoading, setObservationsLoading] = useState(true);
   const [recommendations, setRecommendations] = useState<TrendRecommendation[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
+  const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
+  const [contentIdeasLoading, setContentIdeasLoading] = useState(true);
+  const [tab, setTab] = useState<TabKey>("overview");
 
   const loadPosts = useCallback(async () => {
     const res = await fetch("/api/marketing/social", { cache: "no-store" });
@@ -449,12 +768,19 @@ export default function SocialIntelligencePage() {
     setRecommendationsLoading(false);
   }, []);
 
+  const loadContentIdeas = useCallback(async () => {
+    const res = await fetch("/api/social-intelligence/content-ideas", { cache: "no-store" });
+    if (res.ok) setContentIdeas((await res.json()).ideas);
+    setContentIdeasLoading(false);
+  }, []);
+
   useEffect(() => {
     loadPosts();
     loadAttribution();
     loadObservations();
     loadRecommendations();
-  }, [loadPosts, loadAttribution, loadObservations, loadRecommendations]);
+    loadContentIdeas();
+  }, [loadPosts, loadAttribution, loadObservations, loadRecommendations, loadContentIdeas]);
 
   async function handleDeleteObservation(id: number) {
     await fetch(`/api/social-intelligence/trends/${id}`, { method: "DELETE" });
@@ -508,225 +834,271 @@ export default function SocialIntelligencePage() {
   const hasAnyRevenueSignal = posts.some((p) => p.revenue_attributed > 0);
   const attributionRows = attribution?.rows ?? [];
 
+  const contentIdeasLite = useMemo(
+    () => contentIdeas.map((i) => ({ id: i.id, idea_type: i.idea_type, target_date: i.target_date, product: i.product, platform: i.platform, status: i.status })),
+    [contentIdeas],
+  );
+
   return (
     <Page
       title="Social & Conversion Intelligence"
       description="Phase 1: real Shopify data plus manually-logged posts (UTM tracking, attribution, content performance). Phase 2: manually-researched trend fit scoring. Phase 3 (live trend providers, a learning loop comparing expected vs. actual outcomes) is not built — it depends on trend-API access this project doesn't have yet."
     >
-      <AutoInsightsPanel />
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, flexWrap: "wrap" }}>
+        {TABS.map((t) => {
+          const active = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className="font-mono"
+              style={{
+                border: `1px solid ${active ? "var(--border-strong)" : "var(--border)"}`,
+                background: active ? "var(--surface)" : "var(--surface-alt)",
+                color: active ? "var(--text)" : "var(--text-soft)",
+                padding: "8px 14px",
+                borderRadius: 8,
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                cursor: "pointer",
+                fontWeight: active ? 600 : 400,
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
 
-      <UtmBuilder />
+      {tab === "overview" && <AutoInsightsPanel />}
 
-      <Panel title="Shopify Campaign Attribution (Live, 180d)">
-        {attributionLoading ? (
-          <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
-        ) : !attribution?.configured ? (
-          <p style={{ fontSize: 13, color: "var(--text-soft)" }}>
-            Shopify is not connected. Set <code>SHOPIFY_STORE_DOMAIN</code>, <code>SHOPIFY_CLIENT_ID</code>, and <code>SHOPIFY_CLIENT_SECRET</code> to pull real UTM-tagged campaign traffic here.
-          </p>
-        ) : attributionRows.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--text-soft)" }}>
-            No UTM-tagged sessions or orders in the trailing 180 days. This is a real result, not an error — Shopify only reports campaign
-            attribution for traffic that arrives through a tagged link. Use the UTM Builder above when sharing social links, then check
-            back here once that traffic starts arriving.
-          </p>
-        ) : (
-          <DataTable
-            emptyText="No campaign attribution data."
-            rows={attributionRows}
-            columns={[
-              { header: "Campaign", render: (r) => r.utmCampaign },
-              { header: "Source", render: (r) => r.utmSource },
-              { header: "Medium", render: (r) => r.utmMedium },
-              { header: "Sessions", render: (r) => formatNumber(r.sessions), align: "right" },
-              { header: "Conv. Rate", render: (r) => `${(r.conversionRate * 100).toFixed(1)}%`, align: "right" },
-              { header: "Orders", render: (r) => formatNumber(r.orders), align: "right" },
-              { header: "Sales", render: (r) => formatCurrency(r.sales), align: "right" },
-              { header: "AOV", render: (r) => formatCurrency(r.averageOrderValue), align: "right" },
-            ]}
-          />
-        )}
-      </Panel>
+      {tab === "content" && (
+        <>
+          <ContentIdeasPanel ideas={contentIdeas} loading={contentIdeasLoading} onChanged={loadContentIdeas} />
+          <ContentCalendarPanel contentIdeas={contentIdeasLite} />
+          <UtmBuilder />
+        </>
+      )}
 
-      <Panel title="Content Performance Analysis">
-        {!hasAnyRevenueSignal && posts.length > 0 && (
-          <p style={{ fontSize: 12, color: "var(--warning)", marginBottom: 14 }}>
-            No post in this list has attributed revenue yet, so scores below are based on clicks and engagement only — treat them as a
-            traffic ranking, not a conversion ranking, until revenue is logged (via the Social Media page) or real UTM sales data starts
-            flowing through.
-          </p>
-        )}
-        {postsLoading ? (
-          <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
-        ) : (
-          <DataTable
-            emptyText="No posts logged yet — add one on the Social Media page."
-            rows={posts}
-            columns={[
-              { header: "Date", render: (p) => formatDate(p.posted_date) },
-              { header: "Platform", render: (p) => <span style={{ textTransform: "capitalize" }}>{p.platform}</span> },
-              { header: "Caption", render: (p) => <span style={{ color: "var(--text-soft)" }}>{p.caption?.slice(0, 60) ?? "—"}</span> },
-              { header: "UTM Campaign", render: (p) => p.utm_campaign ?? "—" },
-              { header: "Engagement", render: (p) => formatNumber(p.likes + p.comments + p.shares), align: "right" },
-              { header: "Clicks", render: (p) => formatNumber(p.link_clicks), align: "right" },
-              { header: "Revenue", render: (p) => (p.revenue_attributed > 0 ? formatCurrency(p.revenue_attributed) : "—"), align: "right" },
-              {
-                header: "Conversion Score",
-                render: (p) => {
-                  const s = scores.get(p.id);
-                  if (!s || s.score === null) return <Badge variant="outline">Insufficient data</Badge>;
-                  const label = `${s.score}${!s.hasRevenueSignal ? " (traffic only)" : ""}`;
-                  return <Badge variant={s.hasRevenueSignal ? "neutral" : "outline"}>{label}</Badge>;
-                },
-                align: "right",
-              },
-            ]}
-          />
-        )}
-      </Panel>
+      {tab === "performance" && (
+        <>
+          <Panel title="Shopify Campaign Attribution (Live, 180d)">
+            {attributionLoading ? (
+              <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+            ) : !attribution?.configured ? (
+              <p style={{ fontSize: 13, color: "var(--text-soft)" }}>
+                Shopify is not connected. Set <code>SHOPIFY_STORE_DOMAIN</code>, <code>SHOPIFY_CLIENT_ID</code>, and <code>SHOPIFY_CLIENT_SECRET</code> to pull real UTM-tagged campaign traffic here.
+              </p>
+            ) : attributionRows.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--text-soft)" }}>
+                No UTM-tagged sessions or orders in the trailing 180 days. This is a real result, not an error — Shopify only reports
+                campaign attribution for traffic that arrives through a tagged link. Use the UTM Builder (Content & Planning tab) when
+                sharing social links, then check back here once that traffic starts arriving.
+              </p>
+            ) : (
+              <DataTable
+                emptyText="No campaign attribution data."
+                rows={attributionRows}
+                columns={[
+                  { header: "Campaign", render: (r) => r.utmCampaign },
+                  { header: "Source", render: (r) => r.utmSource },
+                  { header: "Medium", render: (r) => r.utmMedium },
+                  { header: "Sessions", render: (r) => formatNumber(r.sessions), align: "right" },
+                  { header: "Conv. Rate", render: (r) => `${(r.conversionRate * 100).toFixed(1)}%`, align: "right" },
+                  { header: "Orders", render: (r) => formatNumber(r.orders), align: "right" },
+                  { header: "Sales", render: (r) => formatCurrency(r.sales), align: "right" },
+                  { header: "AOV", render: (r) => formatCurrency(r.averageOrderValue), align: "right" },
+                ]}
+              />
+            )}
+          </Panel>
 
-      <TrendDataSources />
+          <Panel title="Content Performance Analysis">
+            {!hasAnyRevenueSignal && posts.length > 0 && (
+              <p style={{ fontSize: 12, color: "var(--warning)", marginBottom: 14 }}>
+                No post in this list has attributed revenue yet, so scores below are based on clicks and engagement only — treat them as a
+                traffic ranking, not a conversion ranking, until revenue is logged (via the Social Media page) or real UTM sales data
+                starts flowing through.
+              </p>
+            )}
+            {postsLoading ? (
+              <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+            ) : (
+              <DataTable
+                emptyText="No posts logged yet — add one on the Social Media page."
+                rows={posts}
+                columns={[
+                  { header: "Date", render: (p) => formatDate(p.posted_date) },
+                  { header: "Platform", render: (p) => <span style={{ textTransform: "capitalize" }}>{p.platform}</span> },
+                  { header: "Caption", render: (p) => <span style={{ color: "var(--text-soft)" }}>{p.caption?.slice(0, 60) ?? "—"}</span> },
+                  { header: "UTM Campaign", render: (p) => p.utm_campaign ?? "—" },
+                  { header: "Engagement", render: (p) => formatNumber(p.likes + p.comments + p.shares), align: "right" },
+                  { header: "Clicks", render: (p) => formatNumber(p.link_clicks), align: "right" },
+                  { header: "Revenue", render: (p) => (p.revenue_attributed > 0 ? formatCurrency(p.revenue_attributed) : "—"), align: "right" },
+                  {
+                    header: "Conversion Score",
+                    render: (p) => {
+                      const s = scores.get(p.id);
+                      if (!s || s.score === null) return <Badge variant="outline">Insufficient data</Badge>;
+                      const label = `${s.score}${!s.hasRevenueSignal ? " (traffic only)" : ""}`;
+                      return <Badge variant={s.hasRevenueSignal ? "neutral" : "outline"}>{label}</Badge>;
+                    },
+                    align: "right",
+                  },
+                ]}
+              />
+            )}
+          </Panel>
+        </>
+      )}
 
-      <TrendObservationForm onSaved={loadObservations} />
+      {tab === "trends" && (
+        <>
+          <TrendDataSources />
 
-      <Panel title="Trend Observations">
-        {observationsLoading ? (
-          <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
-        ) : (
-          <DataTable
-            emptyText="No trend observations logged yet."
-            rows={scoredObservations}
-            columns={[
-              { header: "Date", render: (row) => formatDate(row.observation.observed_date) },
-              { header: "Term", render: (row) => row.observation.term },
-              { header: "Platform", render: (row) => row.observation.platform ?? "—" },
-              { header: "Trend Fit Score", render: (row) => <Badge variant="neutral">{String(row.result.score)}</Badge>, align: "right" },
-              { header: "Classification", render: (row) => <Badge variant={row.result.classification === "Ignore" || row.result.classification === "Low Relevance" ? "outline" : "neutral"}>{row.result.classification}</Badge> },
-              {
-                header: "",
-                render: (row) => (
-                  <button type="button" onClick={() => handleDeleteObservation(row.observation.id)} style={{ border: "none", background: "transparent", color: "var(--negative)", cursor: "pointer", fontSize: 12 }}>
-                    Delete
-                  </button>
-                ),
-                align: "right",
-              },
-            ]}
-          />
-        )}
-      </Panel>
+          <TrendObservationForm onSaved={loadObservations} />
 
-      <Panel title="What Should We Post Next?">
-        <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
-          Based only on manually-logged research below — no live trend provider is connected (see Data Sources above), so treat every
-          entry here as a starting hypothesis to validate, not a confirmed opportunity.
-        </p>
-        {scoredObservations.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--text-soft)" }}>Log a trend observation above to see recommendations here.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {scoredObservations.slice(0, 3).map(({ observation, result }) => (
-              <div key={observation.id} className="bracket-panel" style={{ padding: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
-                  <div>
-                    <strong style={{ fontSize: 14 }}>{observation.term}</strong>
-                    {observation.platform && <span style={{ color: "var(--text-soft)", fontSize: 12, marginLeft: 8 }}>({observation.platform})</span>}
+          <Panel title="Trend Observations">
+            {observationsLoading ? (
+              <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+            ) : (
+              <DataTable
+                emptyText="No trend observations logged yet."
+                rows={scoredObservations}
+                columns={[
+                  { header: "Date", render: (row) => formatDate(row.observation.observed_date) },
+                  { header: "Term", render: (row) => row.observation.term },
+                  { header: "Platform", render: (row) => row.observation.platform ?? "—" },
+                  { header: "Trend Fit Score", render: (row) => <Badge variant="neutral">{String(row.result.score)}</Badge>, align: "right" },
+                  { header: "Classification", render: (row) => <Badge variant={row.result.classification === "Ignore" || row.result.classification === "Low Relevance" ? "outline" : "neutral"}>{row.result.classification}</Badge> },
+                  {
+                    header: "",
+                    render: (row) => (
+                      <button type="button" onClick={() => handleDeleteObservation(row.observation.id)} style={{ border: "none", background: "transparent", color: "var(--negative)", cursor: "pointer", fontSize: 12 }}>
+                        Delete
+                      </button>
+                    ),
+                    align: "right",
+                  },
+                ]}
+              />
+            )}
+          </Panel>
+
+          <Panel title="What Should We Post Next?">
+            <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
+              Based only on manually-logged research below — no live trend provider is connected (see Data Sources above), so treat every
+              entry here as a starting hypothesis to validate, not a confirmed opportunity.
+            </p>
+            {scoredObservations.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--text-soft)" }}>Log a trend observation above to see recommendations here.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {scoredObservations.slice(0, 3).map(({ observation, result }) => (
+                  <div key={observation.id} className="bracket-panel" style={{ padding: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
+                      <div>
+                        <strong style={{ fontSize: 14 }}>{observation.term}</strong>
+                        {observation.platform && <span style={{ color: "var(--text-soft)", fontSize: 12, marginLeft: 8 }}>({observation.platform})</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <Badge variant="outline">{hedgeForClassification(result.classification)}</Badge>
+                        <Badge variant="neutral">{result.classification}</Badge>
+                        <span className="font-mono" style={{ fontSize: 12, color: "var(--text-soft)" }}>{result.score}/100</span>
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 6, marginBottom: observation.note ? 10 : 0 }}>
+                      {FACTOR_FIELDS.map((f) => (
+                        <span key={f.bodyKey} style={{ fontSize: 11, color: "var(--text-soft)" }}>
+                          {f.label}: <span style={{ color: "var(--text)" }}>{observation[f.bodyKey as keyof TrendObservation]}</span>
+                        </span>
+                      ))}
+                    </div>
+                    {observation.note && <p style={{ fontSize: 12, color: "var(--text-soft)", margin: 0 }}>{observation.note}</p>}
+                    <div style={{ marginTop: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleLogRecommendation(observation, result.score, result.classification)}
+                        className="font-mono"
+                        style={{ border: "1px solid var(--border)", background: "none", color: "var(--text)", padding: "5px 10px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}
+                      >
+                        Log as Recommendation
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <Badge variant="outline">{hedgeForClassification(result.classification)}</Badge>
-                    <Badge variant="neutral">{result.classification}</Badge>
-                    <span className="font-mono" style={{ fontSize: 12, color: "var(--text-soft)" }}>{result.score}/100</span>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 6, marginBottom: observation.note ? 10 : 0 }}>
-                  {FACTOR_FIELDS.map((f) => (
-                    <span key={f.bodyKey} style={{ fontSize: 11, color: "var(--text-soft)" }}>
-                      {f.label}: <span style={{ color: "var(--text)" }}>{observation[f.bodyKey as keyof TrendObservation]}</span>
-                    </span>
-                  ))}
-                </div>
-                {observation.note && <p style={{ fontSize: 12, color: "var(--text-soft)", margin: 0 }}>{observation.note}</p>}
-                <div style={{ marginTop: 10 }}>
-                  <button
-                    type="button"
-                    onClick={() => handleLogRecommendation(observation, result.score, result.classification)}
-                    className="font-mono"
-                    style={{ border: "1px solid var(--border)", background: "none", color: "var(--text)", padding: "5px 10px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}
-                  >
-                    Log as Recommendation
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-      </Panel>
+            )}
+          </Panel>
 
-      <Panel title="Learning Loop">
-        <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
-          Compares what a recommendation predicted against what actually happened once real content is published and logged. Link each
-          recommendation to the social post that came out of it (on the Social Media page) to see its real outcome — a single linked post
-          is never enough to draw a conclusion or adjust future scoring, so every comparison here says so explicitly.
-        </p>
-        {recommendationsLoading ? (
-          <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
-        ) : (
-          <DataTable
-            emptyText='No recommendations logged yet — use "Log as Recommendation" above.'
-            rows={recommendations}
-            columns={[
-              { header: "Recommended", render: (r) => formatDate(r.recommended_date) },
-              { header: "Term", render: (r) => r.term },
-              { header: "Predicted", render: (r) => <Badge variant="outline">{`${r.classification_at_recommendation} (${r.score_at_recommendation})`}</Badge> },
-              {
-                header: "Linked Post",
-                render: (r) => (
-                  <select
-                    value={r.linked_social_post_id ?? ""}
-                    onChange={(e) => handleLinkRecommendation(r.id, e.target.value ? Number(e.target.value) : null)}
-                    style={{ ...inputStyle, width: "auto" }}
-                  >
-                    <option value="">— not linked —</option>
-                    {posts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {formatDate(p.posted_date)} · {p.platform} · {p.caption?.slice(0, 30) ?? `post #${p.id}`}
-                      </option>
-                    ))}
-                  </select>
-                ),
-              },
-              {
-                header: "Outcome",
-                render: (r) => {
-                  const linkedPost = posts.find((p) => p.id === r.linked_social_post_id) ?? null;
-                  const outcome = evaluateLearningLoopOutcome(
-                    linkedPost
-                      ? { revenueAttributed: linkedPost.revenue_attributed, linkClicks: linkedPost.link_clicks, likes: linkedPost.likes, comments: linkedPost.comments, shares: linkedPost.shares }
-                      : null,
-                  );
-                  return (
-                    <span style={{ fontSize: 11.5, color: "var(--text-soft)" }} title={outcome.note}>
-                      {outcome.outcome === "converted" && <Badge variant="neutral">Converted</Badge>}
-                      {outcome.outcome === "engaged-no-revenue" && <Badge variant="outline">Engaged, no revenue</Badge>}
-                      {outcome.outcome === "no-engagement" && <Badge variant="outline">No engagement</Badge>}
-                      {outcome.outcome === "awaiting-outcome" && <Badge variant="outline">Awaiting outcome</Badge>}
-                    </span>
-                  );
-                },
-              },
-              {
-                header: "",
-                render: (r) => (
-                  <button type="button" onClick={() => handleDeleteRecommendation(r.id)} style={{ border: "none", background: "transparent", color: "var(--negative)", cursor: "pointer", fontSize: 12 }}>
-                    Delete
-                  </button>
-                ),
-                align: "right",
-              },
-            ]}
-          />
-        )}
-      </Panel>
+          <Panel title="Learning Loop">
+            <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
+              Compares what a recommendation predicted against what actually happened once real content is published and logged. Link
+              each recommendation to the social post that came out of it (on the Social Media page) to see its real outcome — a single
+              linked post is never enough to draw a conclusion or adjust future scoring, so every comparison here says so explicitly.
+            </p>
+            {recommendationsLoading ? (
+              <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+            ) : (
+              <DataTable
+                emptyText='No recommendations logged yet — use "Log as Recommendation" above.'
+                rows={recommendations}
+                columns={[
+                  { header: "Recommended", render: (r) => formatDate(r.recommended_date) },
+                  { header: "Term", render: (r) => r.term },
+                  { header: "Predicted", render: (r) => <Badge variant="outline">{`${r.classification_at_recommendation} (${r.score_at_recommendation})`}</Badge> },
+                  {
+                    header: "Linked Post",
+                    render: (r) => (
+                      <select
+                        value={r.linked_social_post_id ?? ""}
+                        onChange={(e) => handleLinkRecommendation(r.id, e.target.value ? Number(e.target.value) : null)}
+                        style={{ ...inputStyle, width: "auto" }}
+                      >
+                        <option value="">— not linked —</option>
+                        {posts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {formatDate(p.posted_date)} · {p.platform} · {p.caption?.slice(0, 30) ?? `post #${p.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    ),
+                  },
+                  {
+                    header: "Outcome",
+                    render: (r) => {
+                      const linkedPost = posts.find((p) => p.id === r.linked_social_post_id) ?? null;
+                      const outcome = evaluateLearningLoopOutcome(
+                        linkedPost
+                          ? { revenueAttributed: linkedPost.revenue_attributed, linkClicks: linkedPost.link_clicks, likes: linkedPost.likes, comments: linkedPost.comments, shares: linkedPost.shares }
+                          : null,
+                      );
+                      return (
+                        <span style={{ fontSize: 11.5, color: "var(--text-soft)" }} title={outcome.note}>
+                          {outcome.outcome === "converted" && <Badge variant="neutral">Converted</Badge>}
+                          {outcome.outcome === "engaged-no-revenue" && <Badge variant="outline">Engaged, no revenue</Badge>}
+                          {outcome.outcome === "no-engagement" && <Badge variant="outline">No engagement</Badge>}
+                          {outcome.outcome === "awaiting-outcome" && <Badge variant="outline">Awaiting outcome</Badge>}
+                        </span>
+                      );
+                    },
+                  },
+                  {
+                    header: "",
+                    render: (r) => (
+                      <button type="button" onClick={() => handleDeleteRecommendation(r.id)} style={{ border: "none", background: "transparent", color: "var(--negative)", cursor: "pointer", fontSize: 12 }}>
+                        Delete
+                      </button>
+                    ),
+                    align: "right",
+                  },
+                ]}
+              />
+            )}
+          </Panel>
+        </>
+      )}
     </Page>
   );
 }
