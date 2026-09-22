@@ -83,6 +83,85 @@ interface TrendRecommendation {
   linked_social_post_id: number | null;
 }
 
+type InsightConfidence = "high" | "promising" | "experimental" | "insufficient";
+type InsightKind = "fact" | "inference" | "recommendation";
+
+interface Insight {
+  id: string;
+  kind: InsightKind;
+  confidence: InsightConfidence;
+  text: string;
+}
+
+const INSIGHT_KIND_LABEL: Record<InsightKind, string> = { fact: "Fact", inference: "Inference", recommendation: "Recommendation" };
+const CONFIDENCE_LABEL: Record<InsightConfidence, string> = {
+  high: "High confidence",
+  promising: "Promising test",
+  experimental: "Experimental",
+  insufficient: "Insufficient data",
+};
+
+function AutoInsightsPanel() {
+  const [insights, setInsights] = useState<Insight[]>([]);
+  const [postCount, setPostCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch("/api/social-intelligence/auto-insights", { cache: "no-store" });
+    if (res.ok) {
+      const body = await res.json();
+      setInsights(body.insights);
+      setPostCount(body.postCount);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <Panel
+      title="Automated Feedback & Suggestions"
+      headerAction={
+        <button type="button" onClick={load} className="font-mono" style={{ ...inputStyle, width: "auto", cursor: "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          Refresh
+        </button>
+      }
+    >
+      <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
+        Generated automatically from real, already-imported data (Meta Business Suite insights + Shopify UTM attribution) — no manual
+        logging required. This follows the studiostone-social-conversion-analyst skill&apos;s rules: revenue/orders always lead over
+        engagement, and every item is labeled fact, inference, or recommendation with a confidence level, never a bare verdict. Live trend
+        providers aren&apos;t connected yet, so this reflects performance of what&apos;s already been posted, not forward-looking trend
+        research — use the Trend Observation tool below for that.
+      </p>
+      {loading ? (
+        <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+      ) : insights.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--text-soft)" }}>
+          {postCount === 0
+            ? "No posts or platform insights imported yet — upload a Meta Business Suite export on the Social Media page."
+            : "No notable patterns found yet."}
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {insights.map((insight) => (
+            <div key={insight.id} className="bracket-panel" style={{ padding: 14, display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0, minWidth: 130 }}>
+                <Badge variant="outline">{INSIGHT_KIND_LABEL[insight.kind]}</Badge>
+                <Badge variant={insight.confidence === "high" ? "neutral" : "outline"}>{CONFIDENCE_LABEL[insight.confidence]}</Badge>
+              </div>
+              <p style={{ fontSize: 13, margin: 0, lineHeight: 1.5 }}>{insight.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function factorsFromObservation(o: TrendObservation): TrendFactors {
   return {
     productRelevance: o.product_relevance,
@@ -434,6 +513,8 @@ export default function SocialIntelligencePage() {
       title="Social & Conversion Intelligence"
       description="Phase 1: real Shopify data plus manually-logged posts (UTM tracking, attribution, content performance). Phase 2: manually-researched trend fit scoring. Phase 3 (live trend providers, a learning loop comparing expected vs. actual outcomes) is not built — it depends on trend-API access this project doesn't have yet."
     >
+      <AutoInsightsPanel />
+
       <UtmBuilder />
 
       <Panel title="Shopify Campaign Attribution (Live, 180d)">
