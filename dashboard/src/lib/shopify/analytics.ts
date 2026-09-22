@@ -77,3 +77,82 @@ export async function fetchLandingPageFunnel(): Promise<FunnelResult> {
 
   return { configured: true, rows };
 }
+
+export interface EmailEngagementRow {
+  title: string;
+  sends: number;
+  uniqueViews: number;
+  uniqueClicks: number;
+  totalSales: number;
+  orders: number;
+  unsubscribes: number;
+}
+
+/**
+ * ShopifyQL query against `marketing_engagements`. Verified directly against the real
+ * Admin API (2026-07) on 2026-09-22 via shopify.dev's published schema reference
+ * (shopify.dev/docs/api/shopifyql/latest/schemas/marketing/marketing_engagements) and then
+ * confirmed live: real rows came back for Studiostone's actual Shopify Email activity
+ * (channel `email`) with these exact column names. `marketing_delivery_channel` is not
+ * filterable server-side in this query (ShopifyQL's SINCE/UNTIL/GROUP BY/ORDER BY cover the
+ * grouping we need; there is no WHERE clause here), so the email-only filter is applied
+ * client-side in fetchEmailEngagements below rather than guessed at in the query string.
+ */
+const EMAIL_ENGAGEMENTS_QUERY = `
+  FROM marketing_engagements
+  SHOW marketing_activity_title, marketing_delivery_channel, engagements_sends, engagements_unique_views, engagements_unique_clicks, engagements_total_sales, engagements_orders, engagements_unsubscribes
+  GROUP BY marketing_activity_title, marketing_delivery_channel
+  SINCE -180d
+  UNTIL today
+  ORDER BY engagements_sends DESC
+  LIMIT 50
+`;
+
+interface EmailEngagementsQLResponse {
+  shopifyqlQuery: {
+    tableData: {
+      columns: { name: string; dataType: string; displayName: string }[];
+      rows: Record<string, string>[];
+    } | null;
+    parseErrors: string[];
+  };
+}
+
+export interface EmailEngagementResult {
+  configured: boolean;
+  rows: EmailEngagementRow[];
+}
+
+/** Shopify Email campaign performance (sends/opens/clicks/sales/unsubscribes), trailing 180
+ * days, real Shopify data only. Returns `{configured: false}` when credentials aren't set —
+ * never fabricated. */
+export async function fetchEmailEngagements(): Promise<EmailEngagementResult> {
+  if (!isShopifyConfigured()) return { configured: false, rows: [] };
+
+  const data = await callShopifyGraphQL<EmailEngagementsQLResponse>(`query {
+    shopifyqlQuery(query: ${JSON.stringify(EMAIL_ENGAGEMENTS_QUERY)}) {
+      tableData { columns { name dataType displayName } rows }
+      parseErrors
+    }
+  }`);
+
+  const result = data.shopifyqlQuery;
+  if (result.parseErrors.length > 0) {
+    throw new ShopifyRequestError(`ShopifyQL parse error: ${result.parseErrors.join("; ")}`);
+  }
+  if (!result.tableData) return { configured: true, rows: [] };
+
+  const rows: EmailEngagementRow[] = result.tableData.rows
+    .filter((row) => row.marketing_delivery_channel === "email")
+    .map((row) => ({
+      title: row.marketing_activity_title || "(untitled)",
+      sends: Number(row.engagements_sends) || 0,
+      uniqueViews: Number(row.engagements_unique_views) || 0,
+      uniqueClicks: Number(row.engagements_unique_clicks) || 0,
+      totalSales: Number(row.engagements_total_sales) || 0,
+      orders: Number(row.engagements_orders) || 0,
+      unsubscribes: Number(row.engagements_unsubscribes) || 0,
+    }));
+
+  return { configured: true, rows };
+}
