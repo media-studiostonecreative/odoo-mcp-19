@@ -2,28 +2,42 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Page } from "@/components/ui/Page";
 import { Panel } from "@/components/ui/Panel";
 import { DataTable } from "@/components/ui/DataTable";
+import { Badge } from "@/components/ui/Badge";
 import { formatNumber } from "@/lib/format";
 
-interface LandingPageFunnelRow {
+interface RelatedIssue {
+  id: number;
+  title: string;
+  severity: "critical" | "warning" | "info";
+  frequency: number;
+}
+
+interface JourneyFunnelRow {
   landingPage: string;
   sessions: number;
   sessionsWithCartAdditions: number;
   sessionsThatCompletedCheckout: number;
   conversionRate: number; // 0-1 fraction
+  notable: boolean;
+  relatedIssues: RelatedIssue[];
 }
 
 interface FunnelResponse {
   configured: boolean;
-  rows: LandingPageFunnelRow[];
+  rows: JourneyFunnelRow[];
 }
+
+const COLLAPSED_ROW_COUNT = 10;
 
 export default function CustomerJourneyPage() {
   const [data, setData] = useState<FunnelResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     fetch("/api/marketing/journey", { cache: "no-store" })
@@ -64,10 +78,35 @@ export default function CustomerJourneyPage() {
       )}
 
       {data && data.configured && (
-        <Panel title="Funnel by Landing Page">
+        <Panel
+          title="Funnel by Landing Page"
+          headerAction={
+            data.rows.length > COLLAPSED_ROW_COUNT && (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="font-mono"
+                style={{
+                  border: "1px solid var(--border-strong)",
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                {expanded ? `Show Top ${COLLAPSED_ROW_COUNT}` : `Show All (${data.rows.length})`}
+              </button>
+            )
+          }
+        >
           <DataTable
             emptyText="No session data in the last 30 days."
-            rows={data.rows}
+            rows={expanded ? data.rows : data.rows.slice(0, COLLAPSED_ROW_COUNT)}
             columns={[
               { header: "Landing Page", render: (r) => r.landingPage },
               { header: "Sessions", render: (r) => formatNumber(r.sessions), align: "right" },
@@ -77,6 +116,43 @@ export default function CustomerJourneyPage() {
             ]}
           />
         </Panel>
+      )}
+
+      {data && data.configured && data.rows.some((r) => r.notable && r.relatedIssues.length > 0) && (
+        <div style={{ marginTop: 24 }}>
+          <Panel title="Pages That May Need Attention" tone="yellow">
+            <p style={{ fontSize: 12.5, color: "var(--text-soft)", marginBottom: 16 }}>
+              These landing pages get real traffic but essentially never convert, and have open issues logged against them — the drop-off is likely
+              explained, not a mystery.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {data.rows
+                .filter((r) => r.notable && r.relatedIssues.length > 0)
+                .map((r) => (
+                  <div key={r.landingPage} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+                      <span style={{ fontWeight: 500, fontSize: 13.5 }}>{r.landingPage}</span>
+                      <span style={{ fontSize: 11.5, color: "var(--text-soft)" }} className="font-mono">
+                        {formatNumber(r.sessions)} sessions · {(r.conversionRate * 100).toFixed(1)}% conversion
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                      {r.relatedIssues.map((issue) => (
+                        <div key={issue.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+                          <Badge variant="severity">{issue.severity}</Badge>
+                          <span>{issue.title}</span>
+                          <span style={{ color: "var(--text-soft)" }}>(seen {issue.frequency}×)</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+            <Link href="/" style={{ display: "inline-block", marginTop: 14, fontSize: 12, color: "var(--warning)", textDecoration: "underline" }}>
+              View and resolve in Issues
+            </Link>
+          </Panel>
+        </div>
       )}
     </Page>
   );
