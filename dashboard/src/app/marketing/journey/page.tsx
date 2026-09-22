@@ -10,9 +10,9 @@ import { formatNumber } from "@/lib/format";
 interface LandingPageFunnelRow {
   landingPage: string;
   sessions: number;
-  addToCarts: number;
-  checkouts: number;
-  conversions: number;
+  sessionsWithCartAdditions: number;
+  sessionsThatCompletedCheckout: number;
+  conversionRate: number; // 0-1 fraction
 }
 
 interface FunnelResponse {
@@ -48,14 +48,17 @@ export default function CustomerJourneyPage() {
       {data && !data.configured && (
         <Panel title="Shopify not connected">
           <p style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--text-soft)" }}>
-            This page needs a Shopify Admin API access token to pull real session/cart/checkout data — none is configured yet, so no numbers are
+            This page needs Shopify Admin API credentials to pull real session/cart/checkout data — none are configured yet, so no numbers are
             shown here rather than guessing at them.
           </p>
           <p style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--text-soft)", marginTop: 10 }}>
-            To connect it: generate an Admin API access token in your Shopify store (Settings → Apps → Develop apps), with at least{" "}
-            <code style={{ background: "var(--surface-alt)", padding: "2px 6px", borderRadius: 4 }}>read_reports</code> access, then set{" "}
-            <code style={{ background: "var(--surface-alt)", padding: "2px 6px", borderRadius: 4 }}>SHOPIFY_ADMIN_ACCESS_TOKEN</code> in the
-            project&apos;s root <code style={{ background: "var(--surface-alt)", padding: "2px 6px", borderRadius: 4 }}>.env</code> file.
+            To connect it: create a custom app in your Shopify store (Settings → Apps and sales channels → Develop apps), give it at least{" "}
+            <code style={{ background: "var(--surface-alt)", padding: "2px 6px", borderRadius: 4 }}>read_reports</code> access under Admin API
+            integration, install it, then copy its <strong>Client ID</strong> and <strong>Client Secret</strong> from the API credentials tab into{" "}
+            <code style={{ background: "var(--surface-alt)", padding: "2px 6px", borderRadius: 4 }}>SHOPIFY_CLIENT_ID</code> /{" "}
+            <code style={{ background: "var(--surface-alt)", padding: "2px 6px", borderRadius: 4 }}>SHOPIFY_CLIENT_SECRET</code> in the
+            project&apos;s root <code style={{ background: "var(--surface-alt)", padding: "2px 6px", borderRadius: 4 }}>.env</code> file. (Shopify
+            no longer shows a static access token directly — the dashboard exchanges these for one automatically, refreshed every 24 hours.)
           </p>
         </Panel>
       )}
@@ -68,14 +71,9 @@ export default function CustomerJourneyPage() {
             columns={[
               { header: "Landing Page", render: (r) => r.landingPage },
               { header: "Sessions", render: (r) => formatNumber(r.sessions), align: "right" },
-              { header: "Add to Cart", render: (r) => formatNumber(r.addToCarts), align: "right" },
-              { header: "Checkouts", render: (r) => formatNumber(r.checkouts), align: "right" },
-              { header: "Conversions", render: (r) => formatNumber(r.conversions), align: "right" },
-              {
-                header: "Conv. Rate",
-                render: (r) => `${r.sessions ? ((r.conversions / r.sessions) * 100).toFixed(1) : "0.0"}%`,
-                align: "right",
-              },
+              { header: "Add to Cart", render: (r) => formatNumber(r.sessionsWithCartAdditions), align: "right" },
+              { header: "Reached Checkout", render: (r) => formatNumber(r.sessionsThatCompletedCheckout), align: "right" },
+              { header: "Conv. Rate", render: (r) => `${(r.conversionRate * 100).toFixed(1)}%`, align: "right" },
             ]}
           />
         </Panel>
