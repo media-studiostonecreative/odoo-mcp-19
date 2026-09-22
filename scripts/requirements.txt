@@ -1,0 +1,8 @@
+# Dependencies for scripts/rotate_api_key.py's dedicated venv (scripts/.venv),
+# isolated from the main project's pyproject.toml on purpose. Recreate with:
+#   python3 -m venv scripts/.venv
+#   scripts/.venv/bin/pip install -r scripts/requirements.txt
+#   scripts/.venv/bin/python -m playwright install chromium
+requests>=2.32.4
+python-dotenv>=1.0.0
+playwright>=1.50
