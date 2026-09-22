@@ -46,6 +46,7 @@ function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, "social_posts", "utm_medium", "TEXT");
   addColumnIfMissing(db, "social_posts", "utm_campaign", "TEXT");
   addColumnIfMissing(db, "social_posts", "revenue_attributed", "REAL NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "social_posts", "reach", "INTEGER");
 }
 
 function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
@@ -238,4 +239,24 @@ CREATE TABLE IF NOT EXISTS trend_recommendations (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_trend_recommendations_date ON trend_recommendations(recommended_date);
+
+-- Platform-level (not per-post) social insights imported verbatim from exported
+-- CSVs (Meta Business Suite / SocialBee-style exports). Kept as one row per
+-- (platform, metric, period) rather than normalized into fixed columns, because
+-- the set of metrics each platform reports differs and grows over time -- see
+-- lib/marketing/socialInsightsImport.ts. UNIQUE constraint makes re-importing
+-- the same period idempotent (a corrected re-export overwrites, never duplicates).
+CREATE TABLE IF NOT EXISTS social_platform_insights (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT NOT NULL CHECK(platform IN ('instagram','facebook','tiktok','pinterest')),
+  metric TEXT NOT NULL,
+  period_start TEXT NOT NULL,
+  period_end TEXT NOT NULL,
+  value REAL,
+  unit TEXT,
+  change_vs_prev_period_pct REAL,
+  imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(platform, metric, period_start, period_end)
+);
+CREATE INDEX IF NOT EXISTS idx_social_platform_insights_period ON social_platform_insights(period_start, period_end);
 `;

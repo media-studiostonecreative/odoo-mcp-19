@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       platform: body.platform,
       post_type: body.post_type ?? null,
       caption: body.caption ?? null,
+      reach: body.reach != null ? Number(body.reach) : null,
       likes: Number(body.likes) || 0,
       comments: Number(body.comments) || 0,
       shares: Number(body.shares) || 0,

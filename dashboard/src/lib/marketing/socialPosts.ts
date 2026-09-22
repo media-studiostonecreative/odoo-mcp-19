@@ -15,6 +15,7 @@ export interface SocialPost {
   comments: number;
   shares: number;
   link_clicks: number;
+  reach: number | null;
   notes: string | null;
   utm_source: string | null;
   utm_medium: string | null;
@@ -32,6 +33,7 @@ export interface NewSocialPost {
   comments: number;
   shares: number;
   link_clicks: number;
+  reach?: number | null;
   notes?: string | null;
   utm_source?: string | null;
   utm_medium?: string | null;
@@ -51,13 +53,14 @@ export function createSocialPost(data: NewSocialPost): SocialPost {
   const db = getHealthDb();
   const result = db
     .prepare(
-      `INSERT INTO social_posts (posted_date, platform, post_type, caption, likes, comments, shares, link_clicks, notes, utm_source, utm_medium, utm_campaign, revenue_attributed)
-       VALUES (@posted_date, @platform, @post_type, @caption, @likes, @comments, @shares, @link_clicks, @notes, @utm_source, @utm_medium, @utm_campaign, @revenue_attributed)`,
+      `INSERT INTO social_posts (posted_date, platform, post_type, caption, likes, comments, shares, link_clicks, reach, notes, utm_source, utm_medium, utm_campaign, revenue_attributed)
+       VALUES (@posted_date, @platform, @post_type, @caption, @likes, @comments, @shares, @link_clicks, @reach, @notes, @utm_source, @utm_medium, @utm_campaign, @revenue_attributed)`,
     )
     .run({
       ...data,
       post_type: data.post_type ?? null,
       caption: data.caption ?? null,
+      reach: data.reach ?? null,
       notes: data.notes ?? null,
       utm_source: data.utm_source ?? null,
       utm_medium: data.utm_medium ?? null,

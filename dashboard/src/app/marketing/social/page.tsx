@@ -21,8 +21,19 @@ interface SocialPost {
   comments: number;
   shares: number;
   link_clicks: number;
+  reach: number | null;
   utm_campaign: string | null;
   revenue_attributed: number;
+}
+
+interface PlatformInsightRow {
+  platform: Platform;
+  metric: string;
+  period_start: string;
+  period_end: string;
+  value: number | null;
+  unit: string | null;
+  change_vs_prev_period_pct: number | null;
 }
 
 const PLATFORMS: Platform[] = ["instagram", "facebook", "tiktok", "pinterest"];
@@ -35,6 +46,7 @@ const EMPTY_FORM = {
   platform: "instagram" as Platform,
   post_type: "",
   caption: "",
+  reach: "",
   likes: "",
   comments: "",
   shares: "",
@@ -52,6 +64,10 @@ export default function SocialMediaPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [insights, setInsights] = useState<PlatformInsightRow[]>([]);
+  const [insightsLoading, setInsightsLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   const load = useCallback(async (platform: PlatformFilter) => {
     const qs = platform === "all" ? "" : `?platform=${platform}`;
@@ -60,10 +76,47 @@ export default function SocialMediaPage() {
     setLoading(false);
   }, []);
 
+  const loadInsights = useCallback(async () => {
+    const res = await fetch("/api/marketing/social/insights", { cache: "no-store" });
+    if (res.ok) setInsights((await res.json()).insights);
+    setInsightsLoading(false);
+  }, []);
+
   useEffect(() => {
     setLoading(true);
     load(filter);
   }, [filter, load]);
+
+  useEffect(() => {
+    loadInsights();
+  }, [loadInsights]);
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportMessage(null);
+    try {
+      const csv = await file.text();
+      const res = await fetch("/api/marketing/social/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv }),
+      });
+      if (res.ok) {
+        const { result } = await res.json();
+        setImportMessage(`Imported ${result.postsImported} post(s), skipped ${result.postsSkipped} already-imported post(s), updated ${result.summariesImported} summary metric(s).`);
+        load(filter);
+        loadInsights();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setImportMessage(body.error ?? "Import failed.");
+      }
+    } finally {
+      setImporting(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,6 +129,7 @@ export default function SocialMediaPage() {
         platform: form.platform,
         post_type: form.post_type || null,
         caption: form.caption || null,
+        reach: form.reach ? Number(form.reach) : null,
         likes: Number(form.likes) || 0,
         comments: Number(form.comments) || 0,
         shares: Number(form.shares) || 0,
@@ -102,8 +156,69 @@ export default function SocialMediaPage() {
   const totalEngagement = posts.reduce((sum, p) => sum + p.likes + p.comments + p.shares, 0);
   const totalClicks = posts.reduce((sum, p) => sum + p.link_clicks, 0);
 
+  const insightsByPlatform = new Map<Platform, PlatformInsightRow[]>();
+  for (const row of insights) {
+    const list = insightsByPlatform.get(row.platform) ?? [];
+    list.push(row);
+    insightsByPlatform.set(row.platform, list);
+  }
+
   return (
-    <Page title="Social Media" description="Manually-logged Instagram/Facebook/TikTok/Pinterest post performance.">
+    <Page
+      title="Social Media"
+      description="Instagram/Facebook post and platform performance, imported from Meta Business Suite exports — plus a manual log for anything else (TikTok, Pinterest, or posts outside an export window)."
+    >
+      <Panel
+        title="Import Insights CSV"
+        headerAction={
+          <label className="font-mono" style={{ ...inputStyle, width: "auto", cursor: importing ? "default" : "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, opacity: importing ? 0.6 : 1 }}>
+            {importing ? "Importing…" : "Choose CSV"}
+            <input type="file" accept=".csv,text/csv" onChange={handleImportFile} disabled={importing} style={{ display: "none" }} />
+          </label>
+        }
+      >
+        <p style={{ fontSize: 12, color: "var(--text-soft)", margin: 0 }}>
+          Upload a Meta Business Suite insights export (Instagram or Facebook). Re-uploading the same or an overlapping export is safe —
+          posts already imported are skipped, and summary metrics for a period are updated in place rather than duplicated.
+        </p>
+        {importMessage && <p style={{ fontSize: 12, color: "var(--text)", marginTop: 10 }}>{importMessage}</p>}
+      </Panel>
+
+      <Panel title="Platform Insights (Imported)">
+        {insightsLoading ? (
+          <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+        ) : insights.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--text-soft)" }}>No platform insights imported yet — upload a CSV export above.</p>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
+            {Array.from(insightsByPlatform.entries()).map(([platform, rows]) => (
+              <div key={platform}>
+                <p className="font-mono" style={{ fontSize: 11, color: "var(--text-soft)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                  {platform} — {formatDate(rows[0]!.period_start)} to {formatDate(rows[0]!.period_end)}
+                </p>
+                <DataTable
+                  emptyText="No metrics."
+                  rows={rows}
+                  columns={[
+                    { header: "Metric", render: (r) => r.metric },
+                    {
+                      header: "Value",
+                      render: (r) => (r.value === null ? "—" : r.unit === "percent" ? `${r.value.toFixed(1)}%` : formatNumber(r.value)),
+                      align: "right",
+                    },
+                    {
+                      header: "vs Prev",
+                      render: (r) => (r.change_vs_prev_period_pct === null ? "—" : <span style={{ color: r.change_vs_prev_period_pct >= 0 ? "var(--positive)" : "var(--negative)" }}>{r.change_vs_prev_period_pct >= 0 ? "+" : ""}{r.change_vs_prev_period_pct.toFixed(1)}%</span>),
+                      align: "right",
+                    },
+                  ]}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 24 }}>
         <StatCard label="Posts" value={String(posts.length)} />
         <StatCard label="Total Engagement" value={formatNumber(totalEngagement)} />
@@ -170,6 +285,10 @@ export default function SocialMediaPage() {
               <input type="text" value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} style={inputStyle} />
             </div>
             <div>
+              <label style={labelStyle}>Reach</label>
+              <input type="number" min={0} value={form.reach} onChange={(e) => setForm({ ...form, reach: e.target.value })} style={inputStyle} />
+            </div>
+            <div>
               <label style={labelStyle}>Likes</label>
               <input type="number" min={0} value={form.likes} onChange={(e) => setForm({ ...form, likes: e.target.value })} style={inputStyle} />
             </div>
@@ -224,6 +343,7 @@ export default function SocialMediaPage() {
               { header: "Date", render: (p) => formatDate(p.posted_date) },
               { header: "Platform", render: (p) => <span style={{ textTransform: "capitalize" }}>{p.platform}</span> },
               { header: "Type", render: (p) => p.post_type ?? "—" },
+              { header: "Reach", render: (p) => (p.reach === null ? "—" : formatNumber(p.reach)), align: "right" },
               { header: "Likes", render: (p) => formatNumber(p.likes), align: "right" },
               { header: "Comments", render: (p) => formatNumber(p.comments), align: "right" },
               { header: "Shares", render: (p) => formatNumber(p.shares), align: "right" },
