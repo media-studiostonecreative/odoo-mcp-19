@@ -19,9 +19,9 @@ const BUSINESS_AND_MARKETING: NavItem[] = [
 ];
 
 const TOOLS: NavItem[] = [
-  { href: "/tools/quick-scan", label: "Quick Scan", enabled: false },
-  { href: "/tools/audit-history", label: "Audit History", enabled: false },
-  { href: "/tools/settings", label: "Settings", enabled: false },
+  { href: "/tools/quick-scan", label: "Quick Scan", enabled: true },
+  { href: "/tools/audit-history", label: "Audit History", enabled: true },
+  { href: "/tools/settings", label: "Settings", enabled: true },
 ];
 
 function NavLink({ item }: { item: NavItem }) {

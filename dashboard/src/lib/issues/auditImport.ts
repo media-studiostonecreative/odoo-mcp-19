@@ -234,3 +234,48 @@ export function getLatestAudit(): LatestAudit | null {
       | undefined) ?? null
   );
 }
+
+export interface AuditImportRow {
+  id: number;
+  report_path: string;
+  audit_date: string;
+  status: string | null;
+  executive_summary: string | null;
+  critical_count: number;
+  warning_count: number;
+  health_score: number | null;
+  imported_at: string;
+}
+
+/** All imported monthly audits, most recent first. Runs the same import-new-reports
+ * sweep as getLatestAudit so a page load always reflects any report dropped on disk. */
+export function listAudits(): AuditImportRow[] {
+  importNewAuditReports();
+  return getHealthDb().prepare(`SELECT * FROM audit_imports ORDER BY audit_date DESC`).all() as AuditImportRow[];
+}
+
+export interface ContentFindingRow {
+  id: number;
+  fingerprint: string;
+  priority: string | null;
+  category: string | null;
+  page: string | null;
+  title: string;
+  body: string | null;
+  recommendation: string | null;
+  change_status: string | null;
+}
+
+export interface AuditDetail extends AuditImportRow {
+  findings: ContentFindingRow[];
+}
+
+export function getAuditDetail(id: number): AuditDetail | null {
+  const db = getHealthDb();
+  const audit = db.prepare(`SELECT * FROM audit_imports WHERE id = ?`).get(id) as AuditImportRow | undefined;
+  if (!audit) return null;
+  const findings = db
+    .prepare(`SELECT * FROM content_findings WHERE audit_import_id = ? ORDER BY priority ASC, id ASC`)
+    .all(id) as ContentFindingRow[];
+  return { ...audit, findings };
+}

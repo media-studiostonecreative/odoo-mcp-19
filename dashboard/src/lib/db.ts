@@ -157,4 +157,18 @@ CREATE TABLE IF NOT EXISTS social_posts (
 );
 CREATE INDEX IF NOT EXISTS idx_social_posts_date ON social_posts(posted_date);
 CREATE INDEX IF NOT EXISTS idx_social_posts_platform ON social_posts(platform);
+
+-- Small manually-maintained list of "must stay true" facts (a price, a phone number, a
+-- policy line) that someone should periodically eyeball against the live site/Odoo/Shopify.
+-- No automated checking — this is a watchlist, not a monitor.
+CREATE TABLE IF NOT EXISTS critical_facts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  description TEXT NOT NULL,
+  expected_value TEXT NOT NULL,
+  source_url TEXT,
+  last_verified_date TEXT,
+  status TEXT NOT NULL DEFAULT 'unverified' CHECK(status IN ('unverified','confirmed','mismatch')),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
