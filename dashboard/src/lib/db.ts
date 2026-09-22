@@ -216,4 +216,26 @@ CREATE TABLE IF NOT EXISTS trend_observations (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_trend_observations_date ON trend_observations(observed_date);
+
+-- Social & Conversion Intelligence, Phase 3 (partial): the Learning Loop.
+-- Real live trend providers (Google/Pinterest/TikTok) are still not connected --
+-- that half of Phase 3 is genuinely blocked on API access this project doesn't
+-- have, and building fake adapters for it would violate "never fabricate trend
+-- data." What IS real and buildable now: recording what a Trend Fit Score
+-- predicted at the moment it was acted on, then -- once a real social_posts row
+-- exists for it -- comparing that prediction against real, measured outcomes.
+-- A single linked post is not a sample size the spec allows drawing conclusions
+-- from (see the skill's sample-size discount table); this table just makes that
+-- comparison possible to observe over time, it doesn't itself claim significance.
+CREATE TABLE IF NOT EXISTS trend_recommendations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trend_observation_id INTEGER REFERENCES trend_observations(id) ON DELETE SET NULL,
+  term TEXT NOT NULL,
+  score_at_recommendation INTEGER NOT NULL,
+  classification_at_recommendation TEXT NOT NULL,
+  recommended_date TEXT NOT NULL DEFAULT (datetime('now')),
+  linked_social_post_id INTEGER REFERENCES social_posts(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_trend_recommendations_date ON trend_recommendations(recommended_date);
 `;

@@ -11,6 +11,7 @@ import { scoreSocialPosts } from "@/lib/social/scoring";
 import { buildUtmUrl, UTM_SOURCES, UTM_MEDIUMS, InvalidUtmUrlError, type UtmSource, type UtmMedium } from "@/lib/social/utm";
 import { scoreTrendFit, hedgeForClassification, type TrendFactors } from "@/lib/social/trendScore";
 import { TREND_PROVIDERS } from "@/lib/social/trendProviders";
+import { evaluateLearningLoopOutcome } from "@/lib/social/learningLoopOutcome";
 
 type Platform = "instagram" | "facebook" | "tiktok" | "pinterest";
 
@@ -71,6 +72,16 @@ const FACTOR_FIELDS: { key: keyof TrendFactors; label: string; bodyKey: string }
   { key: "contentSuitability", label: "Content Suitability", bodyKey: "content_suitability" },
   { key: "inventoryAvailability", label: "Inventory Availability", bodyKey: "inventory_availability" },
 ];
+
+interface TrendRecommendation {
+  id: number;
+  trend_observation_id: number | null;
+  term: string;
+  score_at_recommendation: number;
+  classification_at_recommendation: string;
+  recommended_date: string;
+  linked_social_post_id: number | null;
+}
 
 function factorsFromObservation(o: TrendObservation): TrendFactors {
   return {
@@ -332,6 +343,8 @@ export default function SocialIntelligencePage() {
   const [attributionLoading, setAttributionLoading] = useState(true);
   const [observations, setObservations] = useState<TrendObservation[]>([]);
   const [observationsLoading, setObservationsLoading] = useState(true);
+  const [recommendations, setRecommendations] = useState<TrendRecommendation[]>([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true);
 
   const loadPosts = useCallback(async () => {
     const res = await fetch("/api/marketing/social", { cache: "no-store" });
@@ -351,15 +364,50 @@ export default function SocialIntelligencePage() {
     setObservationsLoading(false);
   }, []);
 
+  const loadRecommendations = useCallback(async () => {
+    const res = await fetch("/api/social-intelligence/recommendations", { cache: "no-store" });
+    if (res.ok) setRecommendations((await res.json()).recommendations);
+    setRecommendationsLoading(false);
+  }, []);
+
   useEffect(() => {
     loadPosts();
     loadAttribution();
     loadObservations();
-  }, [loadPosts, loadAttribution, loadObservations]);
+    loadRecommendations();
+  }, [loadPosts, loadAttribution, loadObservations, loadRecommendations]);
 
   async function handleDeleteObservation(id: number) {
     await fetch(`/api/social-intelligence/trends/${id}`, { method: "DELETE" });
     loadObservations();
+  }
+
+  async function handleLogRecommendation(observation: TrendObservation, score: number, classification: string) {
+    await fetch("/api/social-intelligence/recommendations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        trend_observation_id: observation.id,
+        term: observation.term,
+        score_at_recommendation: score,
+        classification_at_recommendation: classification,
+      }),
+    });
+    loadRecommendations();
+  }
+
+  async function handleLinkRecommendation(id: number, socialPostId: number | null) {
+    await fetch(`/api/social-intelligence/recommendations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linked_social_post_id: socialPostId }),
+    });
+    loadRecommendations();
+  }
+
+  async function handleDeleteRecommendation(id: number) {
+    await fetch(`/api/social-intelligence/recommendations/${id}`, { method: "DELETE" });
+    loadRecommendations();
   }
 
   const scoredObservations = useMemo(
@@ -517,9 +565,85 @@ export default function SocialIntelligencePage() {
                   ))}
                 </div>
                 {observation.note && <p style={{ fontSize: 12, color: "var(--text-soft)", margin: 0 }}>{observation.note}</p>}
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => handleLogRecommendation(observation, result.score, result.classification)}
+                    className="font-mono"
+                    style={{ border: "1px solid var(--border)", background: "none", color: "var(--text)", padding: "5px 10px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}
+                  >
+                    Log as Recommendation
+                  </button>
+                </div>
               </div>
             ))}
           </div>
+        )}
+      </Panel>
+
+      <Panel title="Learning Loop">
+        <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
+          Compares what a recommendation predicted against what actually happened once real content is published and logged. Link each
+          recommendation to the social post that came out of it (on the Social Media page) to see its real outcome — a single linked post
+          is never enough to draw a conclusion or adjust future scoring, so every comparison here says so explicitly.
+        </p>
+        {recommendationsLoading ? (
+          <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
+        ) : (
+          <DataTable
+            emptyText='No recommendations logged yet — use "Log as Recommendation" above.'
+            rows={recommendations}
+            columns={[
+              { header: "Recommended", render: (r) => formatDate(r.recommended_date) },
+              { header: "Term", render: (r) => r.term },
+              { header: "Predicted", render: (r) => <Badge variant="outline">{`${r.classification_at_recommendation} (${r.score_at_recommendation})`}</Badge> },
+              {
+                header: "Linked Post",
+                render: (r) => (
+                  <select
+                    value={r.linked_social_post_id ?? ""}
+                    onChange={(e) => handleLinkRecommendation(r.id, e.target.value ? Number(e.target.value) : null)}
+                    style={{ ...inputStyle, width: "auto" }}
+                  >
+                    <option value="">— not linked —</option>
+                    {posts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {formatDate(p.posted_date)} · {p.platform} · {p.caption?.slice(0, 30) ?? `post #${p.id}`}
+                      </option>
+                    ))}
+                  </select>
+                ),
+              },
+              {
+                header: "Outcome",
+                render: (r) => {
+                  const linkedPost = posts.find((p) => p.id === r.linked_social_post_id) ?? null;
+                  const outcome = evaluateLearningLoopOutcome(
+                    linkedPost
+                      ? { revenueAttributed: linkedPost.revenue_attributed, linkClicks: linkedPost.link_clicks, likes: linkedPost.likes, comments: linkedPost.comments, shares: linkedPost.shares }
+                      : null,
+                  );
+                  return (
+                    <span style={{ fontSize: 11.5, color: "var(--text-soft)" }} title={outcome.note}>
+                      {outcome.outcome === "converted" && <Badge variant="neutral">Converted</Badge>}
+                      {outcome.outcome === "engaged-no-revenue" && <Badge variant="outline">Engaged, no revenue</Badge>}
+                      {outcome.outcome === "no-engagement" && <Badge variant="outline">No engagement</Badge>}
+                      {outcome.outcome === "awaiting-outcome" && <Badge variant="outline">Awaiting outcome</Badge>}
+                    </span>
+                  );
+                },
+              },
+              {
+                header: "",
+                render: (r) => (
+                  <button type="button" onClick={() => handleDeleteRecommendation(r.id)} style={{ border: "none", background: "transparent", color: "var(--negative)", cursor: "pointer", fontSize: 12 }}>
+                    Delete
+                  </button>
+                ),
+                align: "right",
+              },
+            ]}
+          />
         )}
       </Panel>
     </Page>
