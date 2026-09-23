@@ -53,6 +53,34 @@ export function createTradeShow(data: NewTradeShow): TradeShow {
   return db.prepare("SELECT * FROM trade_shows WHERE id = ?").get(result.lastInsertRowid) as TradeShow;
 }
 
+export interface TradeShowUpdate {
+  name?: string;
+  location?: string | null;
+  start_date?: string;
+  end_date?: string | null;
+  lead_days?: number;
+  notes?: string | null;
+}
+
+/** Partial update — event details (dates, location, name) change as organizers
+ * confirm them; this avoids delete-and-recreate losing the row's id/history. */
+export function updateTradeShow(id: number, data: TradeShowUpdate): TradeShow | null {
+  const db = getHealthDb();
+  const existing = db.prepare("SELECT * FROM trade_shows WHERE id = ?").get(id) as TradeShow | undefined;
+  if (!existing) return null;
+  const merged: TradeShow = { ...existing, ...data };
+  db.prepare(`UPDATE trade_shows SET name = ?, location = ?, start_date = ?, end_date = ?, lead_days = ?, notes = ? WHERE id = ?`).run(
+    merged.name,
+    merged.location,
+    merged.start_date,
+    merged.end_date,
+    merged.lead_days,
+    merged.notes,
+    id,
+  );
+  return db.prepare("SELECT * FROM trade_shows WHERE id = ?").get(id) as TradeShow;
+}
+
 export function deleteTradeShow(id: number): boolean {
   const result = getHealthDb().prepare("DELETE FROM trade_shows WHERE id = ?").run(id);
   return result.changes > 0;
