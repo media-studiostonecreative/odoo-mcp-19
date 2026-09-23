@@ -577,7 +577,7 @@ function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]
 
 const CALENDAR_TYPE_LABEL: Record<CalendarEntryType, string> = {
   occasion: "Occasion",
-  "trade-show": "Trade Show",
+  "trade-show": "Event",
   "content-idea": "Content Idea",
   "post-deadline": "Post-By Deadline",
 };
@@ -669,18 +669,19 @@ function ContentCalendarPanel({ entries, loading, onChanged }: { entries: Calend
       title="Content Calendar"
       headerAction={
         <button type="button" onClick={() => setShowForm((v) => !v)} className="font-mono" style={{ ...inputStyle, width: "auto", cursor: "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
-          {showForm ? "Cancel" : "+ Add Trade Show"}
+          {showForm ? "Cancel" : "+ Add Event"}
         </button>
       }
     >
       <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
-        Holidays (computed, never guessed), trade shows, dated content ideas, and their post-by deadlines. Click any day for details.
+        Holidays (computed, never guessed), trade shows and other dated events (media appearances, sponsorships), content ideas, and their
+        post-by deadlines. Click any day for details.
       </p>
       {showForm && (
         <form onSubmit={handleAddTradeShow} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16, padding: 16, border: "1px dashed var(--border)", borderRadius: 10 }}>
           <div>
-            <label style={labelStyle}>Show Name</label>
-            <input type="text" required placeholder="e.g. Circle Craft" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle} />
+            <label style={labelStyle}>Event Name</label>
+            <input type="text" required placeholder="e.g. Circle Craft, TV feature" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>Location</label>
