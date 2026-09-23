@@ -23,6 +23,7 @@ import { scoreTrendFit, hedgeForClassification, type TrendFactors } from "@/lib/
 import { TREND_PROVIDERS } from "@/lib/social/trendProviders";
 import { evaluateLearningLoopOutcome } from "@/lib/social/learningLoopOutcome";
 import type { HashtagEntry, ContentIdeaType, ContentIdeaConfidence, ContentIdeaStatus, ContentIdeaFormat } from "@/lib/social/contentIdeas";
+import { POSTING_TIME_RESEARCH_NOTE } from "@/lib/social/postingTimes";
 
 type Platform = "instagram" | "facebook" | "tiktok" | "pinterest";
 
@@ -432,6 +433,7 @@ interface ContentIdea {
   source_post_id: number | null;
   occasion_id: string | null;
   target_date: string | null;
+  suggested_time: string | null;
   platform: string;
   format: ContentIdeaFormat;
   product: string;
@@ -455,7 +457,11 @@ const IDEA_STATUS_ACTIONS: { status: ContentIdeaStatus; label: string }[] = [
   { status: "dismissed", label: "Dismiss" },
 ];
 
+const COLLAPSED_IDEA_COUNT = 4;
+
 function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]; loading: boolean; onChanged: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+
   async function handleStatus(id: number, status: ContentIdeaStatus) {
     await fetch(`/api/social-intelligence/content-ideas/${id}`, {
       method: "PATCH",
@@ -471,13 +477,29 @@ function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]
   }
 
   const active = ideas.filter((i) => i.status !== "dismissed" && i.status !== "used");
+  const visible = expanded ? active : active.slice(0, COLLAPSED_IDEA_COUNT);
 
   return (
-    <Panel title="Content Ideas">
+    <Panel
+      title="Content Ideas"
+      headerAction={
+        active.length > COLLAPSED_IDEA_COUNT && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="font-mono"
+            style={{ ...inputStyle, width: "auto", cursor: "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}
+          >
+            {expanded ? `Show Top ${COLLAPSED_IDEA_COUNT}` : `Show All (${active.length})`}
+          </button>
+        )
+      }
+    >
       <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
         Repost/refresh/new content ideas, written by asking Claude to act as a social media specialist against real post performance and
         real Shopify inventory — not a live, on-demand AI generator wired into this button. Ask for more anytime and they&apos;ll appear
-        here for review.
+        here for review. Suggested times are general industry research (Buffer/Later/Sprout Social), not measured from this account&apos;s
+        own audience — see the caveat on hover.
       </p>
       {loading ? (
         <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
@@ -485,7 +507,7 @@ function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]
         <p style={{ fontSize: 13, color: "var(--text-soft)" }}>No open content ideas — ask Claude to generate some.</p>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12, alignItems: "start" }}>
-          {active.map((idea) => (
+          {visible.map((idea) => (
             <div key={idea.id} className="bracket-panel" style={{ padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
                 <div>
@@ -503,7 +525,12 @@ function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <Badge variant={idea.confidence === "high" ? "neutral" : "outline"}>{CONFIDENCE_LABEL[idea.confidence]}</Badge>
-                  {idea.target_date && <span className="font-mono" style={{ fontSize: 11, color: "var(--text-soft)" }}>{formatDate(idea.target_date)}</span>}
+                  {idea.target_date && (
+                    <span className="font-mono" style={{ fontSize: 11, color: "var(--text-soft)" }} title={idea.suggested_time ? POSTING_TIME_RESEARCH_NOTE : undefined}>
+                      {formatDate(idea.target_date)}
+                      {idea.suggested_time ? ` · ${idea.suggested_time}` : ""}
+                    </span>
+                  )}
                 </div>
               </div>
               {idea.hook && <p style={{ fontSize: 13, fontStyle: "italic", margin: "0 0 6px" }}>&quot;{idea.hook}&quot;</p>}

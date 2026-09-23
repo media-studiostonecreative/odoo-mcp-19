@@ -49,6 +49,7 @@ function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, "social_posts", "reach", "INTEGER");
   addColumnIfMissing(db, "trade_shows", "lead_days", "INTEGER NOT NULL DEFAULT 10");
   addColumnIfMissing(db, "content_ideas", "format", "TEXT NOT NULL DEFAULT 'photo'");
+  addColumnIfMissing(db, "content_ideas", "suggested_time", "TEXT");
 }
 
 function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {

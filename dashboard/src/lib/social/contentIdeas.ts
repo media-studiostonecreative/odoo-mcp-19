@@ -3,6 +3,7 @@ import "server-only";
 
 import { getHealthDb } from "../db";
 import type { SocialPlatform } from "../marketing/socialPosts";
+import { suggestPostingTime } from "./postingTimes";
 
 export type ContentIdeaType = "repost" | "refresh" | "new";
 export type ContentIdeaConfidence = "high" | "promising" | "experimental" | "insufficient";
@@ -20,6 +21,7 @@ export interface ContentIdea {
   source_post_id: number | null;
   occasion_id: string | null;
   target_date: string | null;
+  suggested_time: string | null;
   platform: SocialPlatform;
   format: ContentIdeaFormat;
   product: string;
@@ -41,6 +43,10 @@ export interface NewContentIdea {
   source_post_id?: number | null;
   occasion_id?: string | null;
   target_date?: string | null;
+  /** Explicit override. When omitted and target_date is set, this is auto-computed
+   * from platform/format/weekday via lib/social/postingTimes.ts (general research,
+   * not Studiostone-specific data — see that file's header). */
+  suggested_time?: string | null;
   platform: SocialPlatform;
   format?: ContentIdeaFormat;
   product: string;
@@ -61,6 +67,7 @@ interface ContentIdeaRow {
   source_post_id: number | null;
   occasion_id: string | null;
   target_date: string | null;
+  suggested_time: string | null;
   platform: SocialPlatform;
   format: ContentIdeaFormat;
   product: string;
@@ -90,20 +97,27 @@ export function listContentIdeas(): ContentIdea[] {
   return rows.map(fromRow);
 }
 
+function resolveSuggestedTime(data: NewContentIdea): string | null {
+  if (data.suggested_time !== undefined) return data.suggested_time;
+  if (!data.target_date) return null;
+  return suggestPostingTime(data.platform, data.format ?? "photo", data.target_date).time;
+}
+
 export function createContentIdea(data: NewContentIdea): ContentIdea {
   const db = getHealthDb();
   const result = db
     .prepare(
       `INSERT INTO content_ideas
-        (idea_type, source_post_id, occasion_id, target_date, platform, format, product, product_handle, pillar, hook, caption, hashtags, cta, reasoning, confidence, inventory_verified)
+        (idea_type, source_post_id, occasion_id, target_date, suggested_time, platform, format, product, product_handle, pillar, hook, caption, hashtags, cta, reasoning, confidence, inventory_verified)
        VALUES
-        (@idea_type, @source_post_id, @occasion_id, @target_date, @platform, @format, @product, @product_handle, @pillar, @hook, @caption, @hashtags, @cta, @reasoning, @confidence, @inventory_verified)`,
+        (@idea_type, @source_post_id, @occasion_id, @target_date, @suggested_time, @platform, @format, @product, @product_handle, @pillar, @hook, @caption, @hashtags, @cta, @reasoning, @confidence, @inventory_verified)`,
     )
     .run({
       idea_type: data.idea_type,
       source_post_id: data.source_post_id ?? null,
       occasion_id: data.occasion_id ?? null,
       target_date: data.target_date ?? null,
+      suggested_time: resolveSuggestedTime(data),
       platform: data.platform,
       format: data.format ?? "photo",
       product: data.product,
@@ -124,6 +138,17 @@ export function updateContentIdeaStatus(id: number, status: ContentIdeaStatus): 
   const db = getHealthDb();
   const result = db.prepare("UPDATE content_ideas SET status = ? WHERE id = ?").run(status, id);
   if (result.changes === 0) return null;
+  return fromRow(db.prepare("SELECT * FROM content_ideas WHERE id = ?").get(id) as ContentIdeaRow);
+}
+
+/** Backfills/recomputes suggested_time for an existing idea from its current
+ * platform/format/target_date (used to apply postingTimes research retroactively). */
+export function recomputeSuggestedTime(id: number): ContentIdea | null {
+  const db = getHealthDb();
+  const row = db.prepare("SELECT * FROM content_ideas WHERE id = ?").get(id) as ContentIdeaRow | undefined;
+  if (!row || !row.target_date) return null;
+  const time = suggestPostingTime(row.platform, row.format, row.target_date).time;
+  db.prepare("UPDATE content_ideas SET suggested_time = ? WHERE id = ?").run(time, id);
   return fromRow(db.prepare("SELECT * FROM content_ideas WHERE id = ?").get(id) as ContentIdeaRow);
 }
 
