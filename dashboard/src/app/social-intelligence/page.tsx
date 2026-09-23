@@ -7,14 +7,22 @@ import { Panel } from "@/components/ui/Panel";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { MonthCalendar, type CalendarDayEntry } from "@/components/ui/MonthCalendar";
+import {
+  buildCalendarEntries,
+  upcomingDeadlineAlerts,
+  type CalendarEntry,
+  type CalendarEntryType,
+  type CalendarOccasion,
+  type CalendarTradeShow,
+  type CalendarContentIdea,
+} from "@/lib/social/calendarEntries";
 import { formatNumber, formatCurrency, formatDate } from "@/lib/format";
 import { scoreSocialPosts } from "@/lib/social/scoring";
 import { buildUtmUrl, UTM_SOURCES, UTM_MEDIUMS, InvalidUtmUrlError, type UtmSource, type UtmMedium } from "@/lib/social/utm";
 import { scoreTrendFit, hedgeForClassification, type TrendFactors } from "@/lib/social/trendScore";
 import { TREND_PROVIDERS } from "@/lib/social/trendProviders";
 import { evaluateLearningLoopOutcome } from "@/lib/social/learningLoopOutcome";
-import type { HashtagEntry, ContentIdeaType, ContentIdeaConfidence, ContentIdeaStatus } from "@/lib/social/contentIdeas";
-import type { SeasonalOccasion } from "@/lib/social/seasonalCalendar";
+import type { HashtagEntry, ContentIdeaType, ContentIdeaConfidence, ContentIdeaStatus, ContentIdeaFormat } from "@/lib/social/contentIdeas";
 
 type Platform = "instagram" | "facebook" | "tiktok" | "pinterest";
 
@@ -425,6 +433,7 @@ interface ContentIdea {
   occasion_id: string | null;
   target_date: string | null;
   platform: string;
+  format: ContentIdeaFormat;
   product: string;
   product_handle: string | null;
   pillar: string | null;
@@ -439,6 +448,7 @@ interface ContentIdea {
 }
 
 const IDEA_TYPE_LABEL: Record<ContentIdeaType, string> = { repost: "Repost", refresh: "Refresh", new: "New" };
+const IDEA_FORMAT_LABEL: Record<ContentIdeaFormat, string> = { photo: "Photo", reel: "Reel", carousel: "Carousel", story: "Story" };
 const IDEA_STATUS_ACTIONS: { status: ContentIdeaStatus; label: string }[] = [
   { status: "approved", label: "Approve" },
   { status: "used", label: "Mark Used" },
@@ -480,6 +490,9 @@ function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
                 <div>
                   <Badge variant="outline">{IDEA_TYPE_LABEL[idea.idea_type]}</Badge>
+                  <span style={{ marginLeft: 6 }}>
+                    <Badge variant="neutral">{IDEA_FORMAT_LABEL[idea.format]}</Badge>
+                  </span>
                   <strong style={{ fontSize: 14, marginLeft: 8 }}>{idea.product}</strong>
                   <span style={{ color: "var(--text-soft)", fontSize: 12, marginLeft: 8, textTransform: "capitalize" }}>{idea.platform}</span>
                   {!idea.inventory_verified && (
@@ -535,37 +548,6 @@ function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]
   );
 }
 
-interface TradeShow {
-  id: number;
-  name: string;
-  location: string | null;
-  start_date: string;
-  end_date: string | null;
-  lead_days: number;
-  post_by_date: string;
-  notes: string | null;
-}
-
-interface ContentIdeaLite {
-  id: number;
-  idea_type: ContentIdeaType;
-  target_date: string | null;
-  product: string;
-  platform: string;
-  status: ContentIdeaStatus;
-}
-
-type CalendarEntryType = "occasion" | "trade-show" | "content-idea" | "post-deadline";
-
-interface CalendarEntry {
-  key: string;
-  type: CalendarEntryType;
-  date: string;
-  label: string;
-  detail: string;
-  deletableTradeShowId?: number;
-}
-
 const CALENDAR_TYPE_LABEL: Record<CalendarEntryType, string> = {
   occasion: "Occasion",
   "trade-show": "Trade Show",
@@ -580,23 +562,29 @@ const CALENDAR_TYPE_COLOR: Record<CalendarEntryType, string> = {
   "post-deadline": "rgba(240, 201, 117, 0.32)",
 };
 
-function isoRange(start: string, end: string): string[] {
-  const out: string[] = [];
-  const cur = new Date(`${start}T00:00:00Z`);
-  const last = new Date(`${end}T00:00:00Z`);
-  while (cur.getTime() <= last.getTime()) {
-    out.push(cur.toISOString().slice(0, 10));
-    cur.setUTCDate(cur.getUTCDate() + 1);
-  }
-  return out;
-}
-
 const EMPTY_TRADE_SHOW_FORM = { name: "", location: "", start_date: "", end_date: "", lead_days: "10", notes: "" };
 
-function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[] }) {
-  const [occasions, setOccasions] = useState<SeasonalOccasion[]>([]);
-  const [tradeShows, setTradeShows] = useState<TradeShow[]>([]);
-  const [loading, setLoading] = useState(true);
+function DeadlineAlertsBanner({ entries }: { entries: CalendarEntry[] }) {
+  const alerts = useMemo(() => upcomingDeadlineAlerts(entries, 2), [entries]);
+  if (alerts.length === 0) return null;
+  return (
+    <div className="bracket-panel" style={{ padding: 16, marginBottom: 20, borderColor: "var(--warning)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <Badge variant="outline">Deadline in ≤2 days</Badge>
+        <strong style={{ fontSize: 13 }}>Post-by deadlines coming up</strong>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {alerts.map((a) => (
+          <p key={a.key} style={{ fontSize: 12.5, margin: 0 }}>
+            <span className="font-mono" style={{ color: "var(--warning)" }}>{formatDate(a.date)}</span> — {a.detail}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContentCalendarPanel({ entries, loading, onChanged }: { entries: CalendarEntry[]; loading: boolean; onChanged: () => void }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_TRADE_SHOW_FORM);
   const [saving, setSaving] = useState(false);
@@ -604,20 +592,6 @@ function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    const [occRes, showsRes] = await Promise.all([
-      fetch("/api/social-intelligence/occasions", { cache: "no-store" }),
-      fetch("/api/social-intelligence/trade-shows", { cache: "no-store" }),
-    ]);
-    if (occRes.ok) setOccasions((await occRes.json()).occasions);
-    if (showsRes.ok) setTradeShows((await showsRes.json()).tradeShows);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   async function handleAddTradeShow(e: React.FormEvent) {
     e.preventDefault();
@@ -637,49 +611,13 @@ function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[
     setSaving(false);
     setForm(EMPTY_TRADE_SHOW_FORM);
     setShowForm(false);
-    load();
+    onChanged();
   }
 
   async function handleDeleteTradeShow(id: number) {
     await fetch(`/api/social-intelligence/trade-shows/${id}`, { method: "DELETE" });
-    load();
+    onChanged();
   }
-
-  const entries: CalendarEntry[] = useMemo(() => {
-    const occasionEntries: CalendarEntry[] = occasions.flatMap((o) => [
-      { key: `occasion-${o.id}`, type: "occasion" as const, date: o.date, label: o.name, detail: o.note },
-      {
-        key: `occasion-deadline-${o.id}`,
-        type: "post-deadline" as const,
-        date: o.suggestedPostByDate,
-        label: `Post by: ${o.name}`,
-        detail: `Content for ${o.name} (${formatDate(o.date)}) should be posted by this date to give it time to work.`,
-      },
-    ]);
-    const tradeShowEntries: CalendarEntry[] = tradeShows.flatMap((t) => {
-      const spanDates = isoRange(t.start_date, t.end_date ?? t.start_date);
-      const showDetail = [t.location, t.end_date ? `through ${formatDate(t.end_date)}` : null, t.notes].filter(Boolean).join(" · ");
-      const spanEntries = spanDates.map((d) => ({ key: `trade-show-${t.id}-${d}`, type: "trade-show" as const, date: d, label: t.name, detail: showDetail, deletableTradeShowId: t.id }));
-      const deadlineEntry = {
-        key: `trade-show-deadline-${t.id}`,
-        type: "post-deadline" as const,
-        date: t.post_by_date,
-        label: `Post by: ${t.name}`,
-        detail: `Announce/promote ${t.name} by this date (${t.lead_days}-day lead time before it starts ${formatDate(t.start_date)}).`,
-      };
-      return [...spanEntries, deadlineEntry];
-    });
-    const ideaEntries: CalendarEntry[] = contentIdeas
-      .filter((i) => i.target_date)
-      .map((i) => ({
-        key: `content-idea-${i.id}`,
-        type: "content-idea" as const,
-        date: i.target_date!,
-        label: `${i.product} (${i.platform})`,
-        detail: `${i.idea_type} · ${i.status}`,
-      }));
-    return [...occasionEntries, ...tradeShowEntries, ...ideaEntries].sort((a, b) => a.date.localeCompare(b.date));
-  }, [occasions, tradeShows, contentIdeas]);
 
   const entriesByDate = useMemo(() => {
     const map: Record<string, CalendarEntry[]> = {};
@@ -845,6 +783,9 @@ export default function SocialIntelligencePage() {
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
   const [contentIdeas, setContentIdeas] = useState<ContentIdea[]>([]);
   const [contentIdeasLoading, setContentIdeasLoading] = useState(true);
+  const [occasions, setOccasions] = useState<CalendarOccasion[]>([]);
+  const [tradeShows, setTradeShows] = useState<CalendarTradeShow[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>("overview");
 
   const loadPosts = useCallback(async () => {
@@ -877,13 +818,24 @@ export default function SocialIntelligencePage() {
     setContentIdeasLoading(false);
   }, []);
 
+  const loadCalendar = useCallback(async () => {
+    const [occRes, showsRes] = await Promise.all([
+      fetch("/api/social-intelligence/occasions", { cache: "no-store" }),
+      fetch("/api/social-intelligence/trade-shows", { cache: "no-store" }),
+    ]);
+    if (occRes.ok) setOccasions((await occRes.json()).occasions);
+    if (showsRes.ok) setTradeShows((await showsRes.json()).tradeShows);
+    setCalendarLoading(false);
+  }, []);
+
   useEffect(() => {
     loadPosts();
     loadAttribution();
     loadObservations();
     loadRecommendations();
     loadContentIdeas();
-  }, [loadPosts, loadAttribution, loadObservations, loadRecommendations, loadContentIdeas]);
+    loadCalendar();
+  }, [loadPosts, loadAttribution, loadObservations, loadRecommendations, loadContentIdeas, loadCalendar]);
 
   async function handleDeleteObservation(id: number) {
     await fetch(`/api/social-intelligence/trends/${id}`, { method: "DELETE" });
@@ -937,9 +889,14 @@ export default function SocialIntelligencePage() {
   const hasAnyRevenueSignal = posts.some((p) => p.revenue_attributed > 0);
   const attributionRows = attribution?.rows ?? [];
 
-  const contentIdeasLite = useMemo(
+  const contentIdeasLite: CalendarContentIdea[] = useMemo(
     () => contentIdeas.map((i) => ({ id: i.id, idea_type: i.idea_type, target_date: i.target_date, product: i.product, platform: i.platform, status: i.status })),
     [contentIdeas],
+  );
+
+  const calendarEntries = useMemo(
+    () => buildCalendarEntries(occasions, tradeShows, contentIdeasLite),
+    [occasions, tradeShows, contentIdeasLite],
   );
 
   return (
@@ -947,6 +904,8 @@ export default function SocialIntelligencePage() {
       title="Social & Conversion Intelligence"
       description="Phase 1: real Shopify data plus manually-logged posts (UTM tracking, attribution, content performance). Phase 2: manually-researched trend fit scoring. Phase 3 (live trend providers, a learning loop comparing expected vs. actual outcomes) is not built — it depends on trend-API access this project doesn't have yet."
     >
+      {!calendarLoading && <DeadlineAlertsBanner entries={calendarEntries} />}
+
       <div style={{ display: "flex", gap: 4, marginBottom: 20, flexWrap: "wrap" }}>
         {TABS.map((t) => {
           const active = t.key === tab;
@@ -979,7 +938,7 @@ export default function SocialIntelligencePage() {
       {tab === "content" && (
         <>
           <ContentIdeasPanel ideas={contentIdeas} loading={contentIdeasLoading} onChanged={loadContentIdeas} />
-          <ContentCalendarPanel contentIdeas={contentIdeasLite} />
+          <ContentCalendarPanel entries={calendarEntries} loading={calendarLoading} onChanged={loadCalendar} />
           <UtmBuilder />
         </>
       )}

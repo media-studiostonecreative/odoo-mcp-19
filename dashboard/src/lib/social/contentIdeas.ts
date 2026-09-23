@@ -7,6 +7,7 @@ import type { SocialPlatform } from "../marketing/socialPosts";
 export type ContentIdeaType = "repost" | "refresh" | "new";
 export type ContentIdeaConfidence = "high" | "promising" | "experimental" | "insufficient";
 export type ContentIdeaStatus = "suggested" | "approved" | "used" | "dismissed";
+export type ContentIdeaFormat = "photo" | "reel" | "carousel" | "story";
 
 export interface HashtagEntry {
   tier: "core" | "subject" | "discovery" | "seasonal" | "regional";
@@ -20,6 +21,7 @@ export interface ContentIdea {
   occasion_id: string | null;
   target_date: string | null;
   platform: SocialPlatform;
+  format: ContentIdeaFormat;
   product: string;
   product_handle: string | null;
   pillar: string | null;
@@ -40,6 +42,7 @@ export interface NewContentIdea {
   occasion_id?: string | null;
   target_date?: string | null;
   platform: SocialPlatform;
+  format?: ContentIdeaFormat;
   product: string;
   product_handle?: string | null;
   pillar?: string | null;
@@ -59,6 +62,7 @@ interface ContentIdeaRow {
   occasion_id: string | null;
   target_date: string | null;
   platform: SocialPlatform;
+  format: ContentIdeaFormat;
   product: string;
   product_handle: string | null;
   pillar: string | null;
@@ -91,9 +95,9 @@ export function createContentIdea(data: NewContentIdea): ContentIdea {
   const result = db
     .prepare(
       `INSERT INTO content_ideas
-        (idea_type, source_post_id, occasion_id, target_date, platform, product, product_handle, pillar, hook, caption, hashtags, cta, reasoning, confidence, inventory_verified)
+        (idea_type, source_post_id, occasion_id, target_date, platform, format, product, product_handle, pillar, hook, caption, hashtags, cta, reasoning, confidence, inventory_verified)
        VALUES
-        (@idea_type, @source_post_id, @occasion_id, @target_date, @platform, @product, @product_handle, @pillar, @hook, @caption, @hashtags, @cta, @reasoning, @confidence, @inventory_verified)`,
+        (@idea_type, @source_post_id, @occasion_id, @target_date, @platform, @format, @product, @product_handle, @pillar, @hook, @caption, @hashtags, @cta, @reasoning, @confidence, @inventory_verified)`,
     )
     .run({
       idea_type: data.idea_type,
@@ -101,6 +105,7 @@ export function createContentIdea(data: NewContentIdea): ContentIdea {
       occasion_id: data.occasion_id ?? null,
       target_date: data.target_date ?? null,
       platform: data.platform,
+      format: data.format ?? "photo",
       product: data.product,
       product_handle: data.product_handle ?? null,
       pillar: data.pillar ?? null,
