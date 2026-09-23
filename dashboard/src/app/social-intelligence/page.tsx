@@ -6,6 +6,7 @@ import { Page } from "@/components/ui/Page";
 import { Panel } from "@/components/ui/Panel";
 import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
+import { MonthCalendar, type CalendarDayEntry } from "@/components/ui/MonthCalendar";
 import { formatNumber, formatCurrency, formatDate } from "@/lib/format";
 import { scoreSocialPosts } from "@/lib/social/scoring";
 import { buildUtmUrl, UTM_SOURCES, UTM_MEDIUMS, InvalidUtmUrlError, type UtmSource, type UtmMedium } from "@/lib/social/utm";
@@ -473,7 +474,7 @@ function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]
       ) : active.length === 0 ? (
         <p style={{ fontSize: 13, color: "var(--text-soft)" }}>No open content ideas — ask Claude to generate some.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12, alignItems: "start" }}>
           {active.map((idea) => (
             <div key={idea.id} className="bracket-panel" style={{ padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
@@ -540,6 +541,8 @@ interface TradeShow {
   location: string | null;
   start_date: string;
   end_date: string | null;
+  lead_days: number;
+  post_by_date: string;
   notes: string | null;
 }
 
@@ -552,7 +555,7 @@ interface ContentIdeaLite {
   status: ContentIdeaStatus;
 }
 
-type CalendarEntryType = "occasion" | "trade-show" | "content-idea";
+type CalendarEntryType = "occasion" | "trade-show" | "content-idea" | "post-deadline";
 
 interface CalendarEntry {
   key: string;
@@ -560,18 +563,35 @@ interface CalendarEntry {
   date: string;
   label: string;
   detail: string;
+  deletableTradeShowId?: number;
 }
 
-const CALENDAR_TYPE_LABEL: Record<CalendarEntryType, string> = { occasion: "Occasion", "trade-show": "Trade Show", "content-idea": "Content Idea" };
+const CALENDAR_TYPE_LABEL: Record<CalendarEntryType, string> = {
+  occasion: "Occasion",
+  "trade-show": "Trade Show",
+  "content-idea": "Content Idea",
+  "post-deadline": "Post-By Deadline",
+};
 
-function daysUntil(dateIso: string): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(`${dateIso}T00:00:00`);
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+const CALENDAR_TYPE_COLOR: Record<CalendarEntryType, string> = {
+  occasion: "rgba(122, 162, 255, 0.28)",
+  "trade-show": "rgba(255, 158, 87, 0.28)",
+  "content-idea": "rgba(120, 220, 160, 0.28)",
+  "post-deadline": "rgba(240, 201, 117, 0.32)",
+};
+
+function isoRange(start: string, end: string): string[] {
+  const out: string[] = [];
+  const cur = new Date(`${start}T00:00:00Z`);
+  const last = new Date(`${end}T00:00:00Z`);
+  while (cur.getTime() <= last.getTime()) {
+    out.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return out;
 }
 
-const EMPTY_TRADE_SHOW_FORM = { name: "", location: "", start_date: "", end_date: "", notes: "" };
+const EMPTY_TRADE_SHOW_FORM = { name: "", location: "", start_date: "", end_date: "", lead_days: "10", notes: "" };
 
 function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[] }) {
   const [occasions, setOccasions] = useState<SeasonalOccasion[]>([]);
@@ -580,6 +600,10 @@ function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_TRADE_SHOW_FORM);
   const [saving, setSaving] = useState(false);
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [occRes, showsRes] = await Promise.all([
@@ -606,6 +630,7 @@ function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[
         location: form.location || null,
         start_date: form.start_date,
         end_date: form.end_date || null,
+        lead_days: Number(form.lead_days) || 10,
         notes: form.notes || null,
       }),
     });
@@ -621,31 +646,58 @@ function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[
   }
 
   const entries: CalendarEntry[] = useMemo(() => {
-    const occasionEntries: CalendarEntry[] = occasions.map((o) => ({
-      key: `occasion-${o.id}`,
-      type: "occasion",
-      date: o.date,
-      label: o.name,
-      detail: `Suggested post-by ${formatDate(o.suggestedPostByDate)} · ${o.note}`,
-    }));
-    const tradeShowEntries: CalendarEntry[] = tradeShows.map((t) => ({
-      key: `trade-show-${t.id}`,
-      type: "trade-show",
-      date: t.start_date,
-      label: t.name,
-      detail: [t.location, t.end_date ? `through ${formatDate(t.end_date)}` : null, t.notes].filter(Boolean).join(" · "),
-    }));
+    const occasionEntries: CalendarEntry[] = occasions.flatMap((o) => [
+      { key: `occasion-${o.id}`, type: "occasion" as const, date: o.date, label: o.name, detail: o.note },
+      {
+        key: `occasion-deadline-${o.id}`,
+        type: "post-deadline" as const,
+        date: o.suggestedPostByDate,
+        label: `Post by: ${o.name}`,
+        detail: `Content for ${o.name} (${formatDate(o.date)}) should be posted by this date to give it time to work.`,
+      },
+    ]);
+    const tradeShowEntries: CalendarEntry[] = tradeShows.flatMap((t) => {
+      const spanDates = isoRange(t.start_date, t.end_date ?? t.start_date);
+      const showDetail = [t.location, t.end_date ? `through ${formatDate(t.end_date)}` : null, t.notes].filter(Boolean).join(" · ");
+      const spanEntries = spanDates.map((d) => ({ key: `trade-show-${t.id}-${d}`, type: "trade-show" as const, date: d, label: t.name, detail: showDetail, deletableTradeShowId: t.id }));
+      const deadlineEntry = {
+        key: `trade-show-deadline-${t.id}`,
+        type: "post-deadline" as const,
+        date: t.post_by_date,
+        label: `Post by: ${t.name}`,
+        detail: `Announce/promote ${t.name} by this date (${t.lead_days}-day lead time before it starts ${formatDate(t.start_date)}).`,
+      };
+      return [...spanEntries, deadlineEntry];
+    });
     const ideaEntries: CalendarEntry[] = contentIdeas
       .filter((i) => i.target_date)
       .map((i) => ({
         key: `content-idea-${i.id}`,
-        type: "content-idea",
+        type: "content-idea" as const,
         date: i.target_date!,
         label: `${i.product} (${i.platform})`,
         detail: `${i.idea_type} · ${i.status}`,
       }));
     return [...occasionEntries, ...tradeShowEntries, ...ideaEntries].sort((a, b) => a.date.localeCompare(b.date));
   }, [occasions, tradeShows, contentIdeas]);
+
+  const entriesByDate = useMemo(() => {
+    const map: Record<string, CalendarEntry[]> = {};
+    for (const e of entries) {
+      (map[e.date] ??= []).push(e);
+    }
+    return map;
+  }, [entries]);
+
+  const calendarDayEntries: Record<string, CalendarDayEntry[]> = useMemo(() => {
+    const map: Record<string, CalendarDayEntry[]> = {};
+    for (const [date, dayEntries] of Object.entries(entriesByDate)) {
+      map[date] = dayEntries.map((e) => ({ id: e.key, label: e.label, kind: e.type }));
+    }
+    return map;
+  }, [entriesByDate]);
+
+  const selectedEntries = selectedDate ? (entriesByDate[selectedDate] ?? []) : [];
 
   return (
     <Panel
@@ -657,8 +709,7 @@ function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[
       }
     >
       <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
-        Every gifting/sale holiday, trade show, and content idea with a target date, merged into one chronological view — computed
-        holidays (never guessed) plus the trade shows you log below plus any dated content idea from the Content Ideas panel.
+        Holidays (computed, never guessed), trade shows, dated content ideas, and their post-by deadlines. Click any day for details.
       </p>
       {showForm && (
         <form onSubmit={handleAddTradeShow} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16, padding: 16, border: "1px dashed var(--border)", borderRadius: 10 }}>
@@ -677,6 +728,10 @@ function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[
           <div>
             <label style={labelStyle}>End Date</label>
             <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Post-By Lead Time (days)</label>
+            <input type="number" min={0} value={form.lead_days} onChange={(e) => setForm({ ...form, lead_days: e.target.value })} style={inputStyle} />
           </div>
           <div style={{ gridColumn: "span 2" }}>
             <label style={labelStyle}>Notes</label>
@@ -697,27 +752,75 @@ function ContentCalendarPanel({ contentIdeas }: { contentIdeas: ContentIdeaLite[
       {loading ? (
         <p style={{ color: "var(--text-soft)", fontSize: 13 }}>Loading…</p>
       ) : (
-        <DataTable
-          emptyText="Nothing on the calendar."
-          rows={entries}
-          columns={[
-            { header: "Date", render: (e) => formatDate(e.date) },
-            { header: "In", render: (e) => `${daysUntil(e.date)}d`, align: "right" },
-            { header: "Type", render: (e) => <Badge variant="outline">{CALENDAR_TYPE_LABEL[e.type]}</Badge> },
-            { header: "What", render: (e) => e.label },
-            { header: "Detail", render: (e) => <span style={{ color: "var(--text-soft)", fontSize: 12 }}>{e.detail}</span> },
-            {
-              header: "",
-              render: (e) =>
-                e.type === "trade-show" ? (
-                  <button type="button" onClick={() => handleDeleteTradeShow(Number(e.key.replace("trade-show-", "")))} style={{ border: "none", background: "transparent", color: "var(--negative)", cursor: "pointer", fontSize: 12 }}>
-                    Delete
+        <>
+          <div style={{ display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
+            {(Object.keys(CALENDAR_TYPE_LABEL) as CalendarEntryType[]).map((k) => (
+              <span key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-soft)" }}>
+                <span style={{ width: 10, height: 10, borderRadius: 3, background: CALENDAR_TYPE_COLOR[k], display: "inline-block" }} />
+                {CALENDAR_TYPE_LABEL[k]}
+              </span>
+            ))}
+          </div>
+          <MonthCalendar
+            year={viewYear}
+            month={viewMonth}
+            entriesByDate={calendarDayEntries}
+            selectedDate={selectedDate}
+            onPrevMonth={() => {
+              const d = new Date(Date.UTC(viewYear, viewMonth - 1, 1));
+              setViewYear(d.getUTCFullYear());
+              setViewMonth(d.getUTCMonth());
+            }}
+            onNextMonth={() => {
+              const d = new Date(Date.UTC(viewYear, viewMonth + 1, 1));
+              setViewYear(d.getUTCFullYear());
+              setViewMonth(d.getUTCMonth());
+            }}
+            onSelectDay={(iso) => setSelectedDate(iso === selectedDate ? null : iso)}
+            kindColor={(kind) => CALENDAR_TYPE_COLOR[kind as CalendarEntryType] ?? "var(--surface-alt)"}
+          />
+          {selectedDate && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setSelectedDate(null)}>
+              <div
+                className="bracket-panel"
+                style={{ maxWidth: 480, width: "90%", maxHeight: "70vh", overflowY: "auto", padding: 20, background: "var(--surface)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <strong style={{ fontSize: 15 }}>{formatDate(selectedDate)}</strong>
+                  <button type="button" onClick={() => setSelectedDate(null)} style={{ border: "none", background: "transparent", color: "var(--text-soft)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>
+                    ×
                   </button>
-                ) : null,
-              align: "right",
-            },
-          ]}
-        />
+                </div>
+                {selectedEntries.length === 0 ? (
+                  <p style={{ fontSize: 13, color: "var(--text-soft)" }}>Nothing on this day.</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {selectedEntries.map((e) => (
+                      <div key={e.key} style={{ borderLeft: `3px solid ${CALENDAR_TYPE_COLOR[e.type]}`, paddingLeft: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <Badge variant="outline">{CALENDAR_TYPE_LABEL[e.type]}</Badge>
+                          <strong style={{ fontSize: 13 }}>{e.label}</strong>
+                        </div>
+                        <p style={{ fontSize: 12.5, color: "var(--text-soft)", margin: 0, lineHeight: 1.5 }}>{e.detail}</p>
+                        {e.deletableTradeShowId != null && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTradeShow(e.deletableTradeShowId!)}
+                            className="font-mono"
+                            style={{ border: "none", background: "transparent", color: "var(--negative)", cursor: "pointer", fontSize: 11, padding: 0, marginTop: 6 }}
+                          >
+                            Delete this trade show
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </Panel>
   );
