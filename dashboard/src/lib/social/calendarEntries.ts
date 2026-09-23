@@ -65,8 +65,8 @@ export function buildCalendarEntries(occasions: CalendarOccasion[], tradeShows: 
       key: `occasion-deadline-${o.id}`,
       type: "post-deadline" as const,
       date: o.suggestedPostByDate,
-      label: `Post by: ${o.name}`,
-      detail: `Content for ${o.name} (${o.date}) should be posted by this date to give it time to work.`,
+      label: `Post-by deadline: ${o.name}`,
+      detail: `This is a deadline, not the occasion itself — ${o.name} is on ${o.date}. Have a post about it published on or before this date, so it has time to reach people before ${o.name} arrives.`,
     },
   ]);
 
@@ -85,21 +85,26 @@ export function buildCalendarEntries(occasions: CalendarOccasion[], tradeShows: 
       key: `trade-show-deadline-${t.id}`,
       type: "post-deadline" as const,
       date: t.post_by_date,
-      label: `Post by: ${t.name}`,
-      detail: `Announce/promote ${t.name} by this date (${t.lead_days}-day lead time before it starts ${t.start_date}).`,
+      label: `Post-by deadline: ${t.name}`,
+      detail: `This is a deadline, not the show itself — ${t.name} runs ${t.start_date}${t.end_date ? ` to ${t.end_date}` : ""}. Have an announcement/promo post published on or before this date (${t.lead_days}-day lead time) so people see it before the show starts.`,
     };
     return [...spanEntries, deadlineEntry];
   });
 
   const ideaEntries: CalendarEntry[] = contentIdeas
-    .filter((i) => i.target_date)
-    .map((i) => ({
-      key: `content-idea-${i.id}`,
-      type: "content-idea" as const,
-      date: i.target_date!,
-      label: `${i.product} (${i.platform})`,
-      detail: `${i.idea_type} · ${i.status}`,
-    }));
+    .filter((i) => i.target_date && i.status !== "dismissed")
+    .map((i) => {
+      const posted = i.status === "used";
+      return {
+        key: `content-idea-${i.id}`,
+        type: "content-idea" as const,
+        date: i.target_date!,
+        label: `${posted ? "Posted" : "Scheduled"}: ${i.product} (${i.platform})`,
+        detail: posted
+          ? `This was published on this day — ${i.idea_type} idea.`
+          : `Drafted and scheduled to go out on this day, not yet confirmed as posted — ${i.idea_type} idea, currently ${i.status}. Approve it in Content Ideas once it's ready.`,
+      };
+    });
 
   return [...occasionEntries, ...tradeShowEntries, ...ideaEntries].sort((a, b) => a.date.localeCompare(b.date));
 }

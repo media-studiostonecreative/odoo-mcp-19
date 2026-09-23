@@ -578,8 +578,8 @@ function ContentIdeasPanel({ ideas, loading, onChanged }: { ideas: ContentIdea[]
 const CALENDAR_TYPE_LABEL: Record<CalendarEntryType, string> = {
   occasion: "Occasion",
   "trade-show": "Event",
-  "content-idea": "Content Idea",
-  "post-deadline": "Post-By Deadline",
+  "content-idea": "Scheduled / Posted",
+  "post-deadline": "Post-By Deadline (not the event)",
 };
 
 const CALENDAR_TYPE_COLOR: Record<CalendarEntryType, string> = {
@@ -596,10 +596,13 @@ function DeadlineAlertsBanner({ entries }: { entries: CalendarEntry[] }) {
   if (alerts.length === 0) return null;
   return (
     <div className="bracket-panel" style={{ padding: 16, marginBottom: 20, borderColor: "var(--warning)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <Badge variant="outline">Deadline in ≤2 days</Badge>
         <strong style={{ fontSize: 13 }}>Post-by deadlines coming up</strong>
       </div>
+      <p style={{ fontSize: 11.5, color: "var(--text-soft)", margin: "0 0 8px" }}>
+        These are the last day to have a post live — not the event/occasion date itself.
+      </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {alerts.map((a) => (
           <p key={a.key} style={{ fontSize: 12.5, margin: 0 }}>
@@ -673,9 +676,16 @@ function ContentCalendarPanel({ entries, loading, onChanged }: { entries: Calend
         </button>
       }
     >
-      <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14 }}>
-        Holidays (computed, never guessed), trade shows and other dated events (media appearances, sponsorships), content ideas, and their
-        post-by deadlines. Click any day for details.
+      <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 6 }}>
+        Holidays (computed, never guessed), trade shows and other dated events (media appearances, sponsorships), and content ideas.
+        Click any day for details.
+      </p>
+      <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14, lineHeight: 1.5 }}>
+        <strong style={{ color: "var(--text)" }}>Green and yellow mean different things:</strong> green is a specific content idea —{" "}
+        <em>&quot;Scheduled: …&quot;</em> means it&apos;s drafted and dated but still awaiting your approval, <em>&quot;Posted: …&quot;</em>{" "}
+        means it actually went out. Yellow <em>&quot;Post-By Deadline&quot;</em> has no post attached yet — it&apos;s a computed
+        reminder that something needs to be live by that date, sitting earlier than the occasion/show it&apos;s for (not on the
+        occasion/show date itself, and not a fixed &quot;post exactly on this day&quot; instruction — any day up to it works).
       </p>
       {showForm && (
         <form onSubmit={handleAddTradeShow} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16, padding: 16, border: "1px dashed var(--border)", borderRadius: 10 }}>

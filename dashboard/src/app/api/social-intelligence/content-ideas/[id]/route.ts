@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateContentIdeaStatus, recomputeSuggestedTime, type ContentIdeaStatus, deleteContentIdea } from "@/lib/social/contentIdeas";
+import { updateContentIdeaStatus, updateContentIdea, recomputeSuggestedTime, type ContentIdeaStatus, type ContentIdeaUpdate, deleteContentIdea } from "@/lib/social/contentIdeas";
 
 export const dynamic = "force-dynamic";
 
@@ -7,11 +7,17 @@ const VALID_STATUSES: ContentIdeaStatus[] = ["suggested", "approved", "used", "d
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const body = (await request.json().catch(() => ({}))) as { status?: string; recompute_time?: boolean };
+  const body = (await request.json().catch(() => ({}))) as { status?: string; recompute_time?: boolean } & ContentIdeaUpdate;
 
   if (body.recompute_time) {
     const idea = recomputeSuggestedTime(Number(id));
     if (!idea) return NextResponse.json({ error: "Idea not found or has no target_date." }, { status: 404 });
+    return NextResponse.json({ idea });
+  }
+
+  if (body.target_date !== undefined || body.platform !== undefined || body.format !== undefined) {
+    const idea = updateContentIdea(Number(id), body);
+    if (!idea) return NextResponse.json({ error: "Idea not found." }, { status: 404 });
     return NextResponse.json({ idea });
   }
 

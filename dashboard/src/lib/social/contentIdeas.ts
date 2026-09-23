@@ -141,6 +141,38 @@ export function updateContentIdeaStatus(id: number, status: ContentIdeaStatus): 
   return fromRow(db.prepare("SELECT * FROM content_ideas WHERE id = ?").get(id) as ContentIdeaRow);
 }
 
+export interface ContentIdeaUpdate {
+  target_date?: string | null;
+  /** Explicit override. When omitted and target_date/platform/format change, this is
+   * recomputed from the new values via lib/social/postingTimes.ts. */
+  suggested_time?: string | null;
+  platform?: SocialPlatform;
+  format?: ContentIdeaFormat;
+  status?: ContentIdeaStatus;
+}
+
+/** General partial update for schedulable fields (when should this post go out, on
+ * what platform/format) — used to reschedule an idea rather than delete-and-recreate it. */
+export function updateContentIdea(id: number, data: ContentIdeaUpdate): ContentIdea | null {
+  const db = getHealthDb();
+  const existing = db.prepare("SELECT * FROM content_ideas WHERE id = ?").get(id) as ContentIdeaRow | undefined;
+  if (!existing) return null;
+
+  const merged: ContentIdeaRow = { ...existing, ...data };
+  const scheduleChanged = data.target_date !== undefined || data.platform !== undefined || data.format !== undefined;
+  const suggestedTime = data.suggested_time !== undefined ? data.suggested_time : scheduleChanged ? (merged.target_date ? suggestPostingTime(merged.platform, merged.format, merged.target_date).time : null) : existing.suggested_time;
+
+  db.prepare(`UPDATE content_ideas SET target_date = ?, suggested_time = ?, platform = ?, format = ?, status = ? WHERE id = ?`).run(
+    merged.target_date,
+    suggestedTime,
+    merged.platform,
+    merged.format,
+    merged.status,
+    id,
+  );
+  return fromRow(db.prepare("SELECT * FROM content_ideas WHERE id = ?").get(id) as ContentIdeaRow);
+}
+
 /** Backfills/recomputes suggested_time for an existing idea from its current
  * platform/format/target_date (used to apply postingTimes research retroactively). */
 export function recomputeSuggestedTime(id: number): ContentIdea | null {
