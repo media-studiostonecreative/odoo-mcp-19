@@ -15,7 +15,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ idea });
   }
 
-  if (body.target_date !== undefined || body.platform !== undefined || body.format !== undefined) {
+  if (body.target_date !== undefined || body.platform !== undefined || body.format !== undefined || body.pillar !== undefined) {
     const idea = updateContentIdea(Number(id), body);
     if (!idea) return NextResponse.json({ error: "Idea not found." }, { status: 404 });
     return NextResponse.json({ idea });

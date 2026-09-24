@@ -63,4 +63,23 @@ describe("updateContentIdea", () => {
     const { updateContentIdea } = await import("@/lib/social/contentIdeas");
     expect(updateContentIdea(999999, { target_date: "2026-09-30" })).toBeNull();
   });
+
+  it("recategorizes pillar without touching schedule fields", async () => {
+    const { createContentIdea, updateContentIdea } = await import("@/lib/social/contentIdeas");
+    const created = createContentIdea({
+      idea_type: "new",
+      platform: "instagram",
+      format: "story",
+      target_date: "2026-10-19",
+      pillar: "behind-the-scenes",
+      product: "Festival of Crafts (event)",
+      caption: "Test caption",
+      reasoning: "Test reasoning",
+      confidence: "high",
+    });
+    const updated = updateContentIdea(created.id, { pillar: "shows" });
+    expect(updated!.pillar).toBe("shows");
+    expect(updated!.target_date).toBe("2026-10-19");
+    expect(updated!.suggested_time).toBe(created.suggested_time);
+  });
 });

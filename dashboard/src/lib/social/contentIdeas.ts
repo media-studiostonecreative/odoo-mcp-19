@@ -149,10 +149,12 @@ export interface ContentIdeaUpdate {
   platform?: SocialPlatform;
   format?: ContentIdeaFormat;
   status?: ContentIdeaStatus;
+  pillar?: string | null;
 }
 
 /** General partial update for schedulable fields (when should this post go out, on
- * what platform/format) — used to reschedule an idea rather than delete-and-recreate it. */
+ * what platform/format) and categorization (pillar) — used to reschedule/recategorize
+ * an idea rather than delete-and-recreate it. */
 export function updateContentIdea(id: number, data: ContentIdeaUpdate): ContentIdea | null {
   const db = getHealthDb();
   const existing = db.prepare("SELECT * FROM content_ideas WHERE id = ?").get(id) as ContentIdeaRow | undefined;
@@ -162,12 +164,13 @@ export function updateContentIdea(id: number, data: ContentIdeaUpdate): ContentI
   const scheduleChanged = data.target_date !== undefined || data.platform !== undefined || data.format !== undefined;
   const suggestedTime = data.suggested_time !== undefined ? data.suggested_time : scheduleChanged ? (merged.target_date ? suggestPostingTime(merged.platform, merged.format, merged.target_date).time : null) : existing.suggested_time;
 
-  db.prepare(`UPDATE content_ideas SET target_date = ?, suggested_time = ?, platform = ?, format = ?, status = ? WHERE id = ?`).run(
+  db.prepare(`UPDATE content_ideas SET target_date = ?, suggested_time = ?, platform = ?, format = ?, status = ?, pillar = ? WHERE id = ?`).run(
     merged.target_date,
     suggestedTime,
     merged.platform,
     merged.format,
     merged.status,
+    merged.pillar,
     id,
   );
   return fromRow(db.prepare("SELECT * FROM content_ideas WHERE id = ?").get(id) as ContentIdeaRow);
