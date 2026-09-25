@@ -44,6 +44,7 @@ export function getHealthDb(): Database.Database {
  * folded into the idempotent CREATE TABLE statements above.
  */
 function runMigrations(db: Database.Database): void {
+  dropAccessCodes(db);
   addColumnIfMissing(db, "social_posts", "utm_source", "TEXT");
   addColumnIfMissing(db, "social_posts", "utm_medium", "TEXT");
   addColumnIfMissing(db, "social_posts", "utm_campaign", "TEXT");
@@ -52,6 +53,34 @@ function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, "trade_shows", "lead_days", "INTEGER NOT NULL DEFAULT 10");
   addColumnIfMissing(db, "content_ideas", "format", "TEXT NOT NULL DEFAULT 'photo'");
   addColumnIfMissing(db, "content_ideas", "suggested_time", "TEXT");
+}
+
+/**
+ * People briefly signed in with access codes (people.code_hash, role,
+ * revoked_at). Codes were dropped for name-only identity; SQLite can't drop a
+ * UNIQUE column in place, so rebuild the table once, keeping ids so sessions,
+ * comments and history still point at the right person.
+ */
+function dropAccessCodes(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info(people)").all() as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === "code_hash")) return;
+  db.pragma("foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE people_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT OR IGNORE INTO people_new (id, name, created_at) SELECT id, name, created_at FROM people ORDER BY id;
+        DROP TABLE people;
+        ALTER TABLE people_new RENAME TO people;
+      `);
+    })();
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
 }
 
 function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
@@ -197,17 +226,12 @@ CREATE TABLE IF NOT EXISTS trade_shows (
 );
 CREATE INDEX IF NOT EXISTS idx_trade_shows_start_date ON trade_shows(start_date);
 
--- Team access (LAN sharing). Each person signs in with their own access code;
--- only a SHA-256 of the code is stored, so the database never holds a usable
--- code. People are revoked, never deleted, so their name stays on everything
--- they wrote.
+-- Who's using the planner (LAN sharing, no sign-in): each device picks a name
+-- once. Names are unique ignoring case, so "nicole" and "Nicole" are one person.
 CREATE TABLE IF NOT EXISTS people (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin','member')),
-  code_hash TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  revoked_at TEXT
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Browser sessions, keyed by a SHA-256 of the cookie token.

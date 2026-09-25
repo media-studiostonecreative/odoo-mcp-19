@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MonthCalendar, type CalendarDayEntry } from "@/components/ui/MonthCalendar";
 import {
   buildCalendarEntries,
@@ -14,7 +14,7 @@ import { FORMAT_LABEL, PLATFORM_LABEL, STATUS_LABEL, readError, shortDate, statu
 
 /**
  * Colour rule for the calendar, kept to the board's two highlights:
- * amber = needs doing (scheduled posts, post-by deadlines), sage = settled
+ * teal = needs doing (scheduled posts, post-by deadlines), lavender = settled
  * (posted, events you're attending), grey = context (holidays).
  */
 type DayKind = "scheduled" | "deadline" | "posted" | "event" | "holiday";
@@ -39,6 +39,27 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function daysBetween(from: string, to: string): number {
+  return Math.round((new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86_400_000);
+}
+
+function without<T>(record: Record<number, T>, id: number): Record<number, T> {
+  const next = { ...record };
+  delete next[id];
+  return next;
+}
+
+interface ShowDates {
+  start: string;
+  end: string | null;
+}
+
+interface Toast {
+  message: string;
+  error?: boolean;
+  undo?: () => void;
+}
+
 export function Planner({
   ideas,
   occasions,
@@ -53,21 +74,42 @@ export function Planner({
   tradeShows: CalendarTradeShow[];
   loading: boolean;
   me: Me | null;
-  onIdeasChanged: () => void;
-  onCalendarChanged: () => void;
+  onIdeasChanged: () => void | Promise<void>;
+  onCalendarChanged: () => void | Promise<void>;
 }) {
   const [openIdeaId, setOpenIdeaId] = useState<number | null>(null);
-  const openIdea = ideas.find((i) => i.id === openIdeaId) ?? null;
-  const ideaById = useMemo(() => new Map(ideas.map((i) => [i.id, i])), [ideas]);
+  // Drag-and-drop moves show in their new place at once, before the save round-trip finishes.
+  const [ideaMoves, setIdeaMoves] = useState<Record<number, string>>({});
+  const [showMoves, setShowMoves] = useState<Record<number, ShowDates>>({});
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), toast.undo ? 7000 : 5000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  const shownIdeas = useMemo(() => ideas.map((i) => (ideaMoves[i.id] !== undefined ? { ...i, target_date: ideaMoves[i.id]! } : i)), [ideas, ideaMoves]);
+  const shownShows = useMemo(
+    () =>
+      tradeShows.map((t) => {
+        const m = showMoves[t.id];
+        return m ? { ...t, start_date: m.start, end_date: m.end, post_by_date: addDays(m.start, -t.lead_days) } : t;
+      }),
+    [tradeShows, showMoves],
+  );
+
+  const openIdea = shownIdeas.find((i) => i.id === openIdeaId) ?? null;
+  const ideaById = useMemo(() => new Map(shownIdeas.map((i) => [i.id, i])), [shownIdeas]);
 
   const entries = useMemo(
     () =>
       buildCalendarEntries(
         occasions,
-        tradeShows,
-        ideas.map((i) => ({ id: i.id, idea_type: i.idea_type, target_date: i.target_date, product: i.product, platform: i.platform, status: i.status, format: i.format })),
+        shownShows,
+        shownIdeas.map((i) => ({ id: i.id, idea_type: i.idea_type, target_date: i.target_date, product: i.product, platform: i.platform, status: i.status, format: i.format })),
       ),
-    [occasions, tradeShows, ideas],
+    [occasions, shownShows, shownIdeas],
   );
 
   const kindOf = (e: CalendarEntry): DayKind => {
@@ -79,16 +121,75 @@ export function Planner({
 
   const deadlines = useMemo(() => upcomingDeadlineAlerts(entries, 2), [entries]);
 
+  async function moveIdea(id: number, name: string, fromDate: string | null, toDate: string, offerUndo: boolean) {
+    setIdeaMoves((m) => ({ ...m, [id]: toDate }));
+    const res = await fetch(`/api/social-intelligence/content-ideas/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_date: toDate }),
+    }).catch(() => null);
+    if (res?.ok) await onIdeasChanged();
+    setIdeaMoves((m) => without(m, id));
+    if (!res?.ok) return setToast({ message: await readError(res, `Couldn't move "${name}".`), error: true });
+    setToast({
+      message: `Moved "${name}" to ${shortDate(toDate)}`,
+      undo: offerUndo && fromDate ? () => moveIdea(id, name, toDate, fromDate, false) : undefined,
+    });
+  }
+
+  async function moveShow(id: number, name: string, from: ShowDates, to: ShowDates, offerUndo: boolean) {
+    setShowMoves((m) => ({ ...m, [id]: to }));
+    const res = await fetch(`/api/social-intelligence/trade-shows/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_date: to.start, end_date: to.end }),
+    }).catch(() => null);
+    if (res?.ok) await onCalendarChanged();
+    setShowMoves((m) => without(m, id));
+    if (!res?.ok) return setToast({ message: await readError(res, `Couldn't move "${name}".`), error: true });
+    setToast({
+      message: `Moved "${name}" to ${shortDate(to.start)}${to.end && to.end !== to.start ? ` – ${shortDate(to.end)}` : ""}`,
+      undo: offerUndo ? () => moveShow(id, name, to, from, false) : undefined,
+    });
+  }
+
+  /** Posts still to go out, and events, can be rescheduled by dragging; holidays,
+   * post-by deadlines (computed) and posts already out (history) can't. */
+  const canDrag = (entryKey: string): boolean => {
+    const e = entries.find((x) => x.key === entryKey);
+    if (!e) return false;
+    const kind = kindOf(e);
+    return kind === "scheduled" || kind === "event";
+  };
+
+  function handleMove(entryKey: string, fromDate: string, toDate: string) {
+    const e = entries.find((x) => x.key === entryKey);
+    if (!e) return;
+    if (e.ideaId != null) {
+      const original = ideas.find((i) => i.id === e.ideaId);
+      if (original) moveIdea(original.id, original.product, original.target_date, toDate, true);
+      return;
+    }
+    if (e.deletableTradeShowId != null) {
+      const show = tradeShows.find((t) => t.id === e.deletableTradeShowId);
+      if (!show) return;
+      const delta = daysBetween(fromDate, toDate);
+      const from = { start: show.start_date, end: show.end_date };
+      const to = { start: addDays(show.start_date, delta), end: show.end_date ? addDays(show.end_date, delta) : null };
+      moveShow(show.id, show.name, from, to, true);
+    }
+  }
+
   const today = todayIso();
   const horizon = addDays(today, UPCOMING_DAYS);
-  const upcoming = ideas
+  const upcoming = shownIdeas
     .filter((i) => i.target_date && i.target_date >= today && i.target_date <= horizon && i.status !== "dismissed")
     .sort((a, b) => (a.target_date! + (a.suggested_time ?? "")).localeCompare(b.target_date! + (b.suggested_time ?? "")));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {deadlines.length > 0 && (
-        <div className="card" style={{ padding: "14px 18px", borderColor: "rgba(242, 184, 75, 0.35)", display: "flex", gap: 14, alignItems: "flex-start" }}>
+        <div className="card" style={{ padding: "14px 18px", borderColor: "var(--accent-border)", display: "flex", gap: 14, alignItems: "flex-start" }}>
           <span className="pill pill-accent" style={{ flexShrink: 0 }}>
             <span className="dot" />
             Due soon
@@ -106,12 +207,49 @@ export function Planner({
 
       <div className="planner-grid">
         <UpcomingList ideas={upcoming} loading={loading} onOpen={setOpenIdeaId} />
-        <CalendarCard entries={entries} kindOf={kindOf} ideaById={ideaById} onOpenIdea={setOpenIdeaId} onChanged={onCalendarChanged} />
+        <CalendarCard entries={entries} kindOf={kindOf} ideaById={ideaById} onOpenIdea={setOpenIdeaId} onChanged={onCalendarChanged} canDrag={canDrag} onMoveEntry={handleMove} />
       </div>
 
-      <IdeasCard ideas={ideas} loading={loading} onOpen={setOpenIdeaId} />
+      <IdeasCard ideas={shownIdeas} loading={loading} onOpen={setOpenIdeaId} />
 
-      {openIdea && <PostDrawer idea={openIdea} me={me} onClose={() => setOpenIdeaId(null)} onChanged={onIdeasChanged} />}
+      {openIdea && <PostDrawer idea={openIdea} me={me} onClose={() => setOpenIdeaId(null)} onChanged={() => void onIdeasChanged()} />}
+
+      {toast && (
+        <div
+          role="status"
+          className="card"
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+            transform: "translateX(-50%)",
+            zIndex: 150,
+            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            maxWidth: "calc(100% - 32px)",
+            background: "var(--surface-raised)",
+            borderColor: toast.error ? "var(--negative)" : "var(--border-strong)",
+            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.5)",
+          }}
+        >
+          <span style={{ fontSize: 13, color: toast.error ? "var(--negative)" : "var(--text)" }}>{toast.message}</span>
+          {toast.undo && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => {
+                const undo = toast.undo!;
+                setToast(null);
+                undo();
+              }}
+            >
+              Undo
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -187,12 +325,16 @@ function CalendarCard({
   ideaById,
   onOpenIdea,
   onChanged,
+  canDrag,
+  onMoveEntry,
 }: {
   entries: CalendarEntry[];
   kindOf: (e: CalendarEntry) => DayKind;
   ideaById: Map<number, PlannerIdea>;
   onOpenIdea: (id: number) => void;
-  onChanged: () => void;
+  onChanged: () => void | Promise<void>;
+  canDrag: (entryKey: string) => boolean;
+  onMoveEntry: (entryKey: string, fromDate: string, toDate: string) => void;
 }) {
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -233,6 +375,7 @@ function CalendarCard({
           <h2 className="font-display" style={{ fontSize: 16, margin: "0 0 8px" }}>
             Calendar
           </h2>
+          <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--text-faint)" }}>Drag a post or event to another day to reschedule it. On a phone, press and hold first.</p>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
             {(Object.keys(DAY_KIND) as DayKind[]).map((k) => (
               <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-soft)" }}>
@@ -269,6 +412,8 @@ function CalendarCard({
         }}
         onSelectDay={(iso) => setSelectedDate(iso === selectedDate ? null : iso)}
         kindColor={(kind) => DAY_KIND[kind as DayKind]?.color ?? "var(--text-faint)"}
+        canDrag={canDrag}
+        onMoveEntry={onMoveEntry}
       />
 
       <details className="about" style={{ marginTop: 14 }}>

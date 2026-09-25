@@ -17,7 +17,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body className={`${geist.variable} ${geistMono.variable}`}>
-        <TopBar person={person ? { name: person.name, role: person.role } : null} />
+        <TopBar person={person ? { name: person.name } : null} />
         <main className="page-main">{children}</main>
       </body>
     </html>

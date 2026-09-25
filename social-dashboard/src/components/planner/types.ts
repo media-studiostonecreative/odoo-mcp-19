@@ -5,7 +5,6 @@ export type { ContentIdeaStatus, ContentIdeaFormat };
 export interface Me {
   id: number;
   name: string;
-  role: "admin" | "member";
 }
 
 export interface PlannerComment {
@@ -61,7 +60,7 @@ export const CONFIDENCE_LABEL: Record<ContentIdeaConfidence, string> = {
 
 export const STATUS_LABEL: Record<ContentIdeaStatus, string> = { suggested: "Suggested", approved: "Approved", used: "Posted", dismissed: "Dismissed" };
 
-/** One colour rule for status everywhere: an amber dot needs a decision, sage is settled. */
+/** One colour rule for status everywhere: a teal dot needs a decision, lavender is settled. */
 export function statusPillClass(status: ContentIdeaStatus): string {
   if (status === "suggested") return "pill pill-review";
   if (status === "approved" || status === "used") return "pill pill-second";

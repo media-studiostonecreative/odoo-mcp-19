@@ -559,9 +559,8 @@ export default function SocialPlannerPage() {
           loading={ideasLoading || calendarLoading}
           me={me}
           onIdeasChanged={loadIdeas}
-          onCalendarChanged={() => {
-            loadCalendar();
-            loadIdeas();
+          onCalendarChanged={async () => {
+            await Promise.all([loadCalendar(), loadIdeas()]);
           }}
         />
       )}

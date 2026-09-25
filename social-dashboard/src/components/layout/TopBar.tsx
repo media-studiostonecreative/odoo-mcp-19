@@ -1,22 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 const NAV = [
   { href: "/", label: "Planner" },
   { href: "/posts", label: "Post log" },
 ];
 
-export function TopBar({ person }: { person: { name: string; role: "admin" | "member" } | null }) {
+export function TopBar({ person }: { person: { name: string } | null }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const nav = person?.role === "admin" ? [...NAV, { href: "/team", label: "Team" }] : NAV;
+  const nav = NAV;
 
-  async function signOut() {
+  async function switchPerson() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    window.location.assign("/login");
   }
 
   return (
@@ -65,8 +63,8 @@ export function TopBar({ person }: { person: { name: string; role: "admin" | "me
               </span>
               <span className="topbar-name">{person.name}</span>
             </span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={signOut}>
-              Sign out
+            <button type="button" className="btn btn-ghost btn-sm" onClick={switchPerson} title="Forget this device and enter a different name">
+              Not you?
             </button>
           </div>
         )}

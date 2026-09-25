@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const person = await currentPerson();
   if (!person) return unauthorized();
-  return NextResponse.json({ person: { id: person.id, name: person.name, role: person.role } });
+  return NextResponse.json({ person: { id: person.id, name: person.name } });
 }

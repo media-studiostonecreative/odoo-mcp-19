@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "migrate:from-dashboard": "node --conditions=react-server scripts/migrate-from-dashboard.mts",
-    "team": "node --conditions=react-server --no-warnings=ExperimentalWarning --import ./scripts/ts-resolve.mjs scripts/team.mts",
     "share": "next build && next start -p 3100 -H 0.0.0.0"
   },
   "dependencies": {

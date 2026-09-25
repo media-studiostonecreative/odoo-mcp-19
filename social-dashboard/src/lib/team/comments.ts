@@ -52,24 +52,23 @@ export function addComment(ideaId: number, author: Pick<Person, "id" | "name">, 
   return db.prepare("SELECT * FROM post_comments WHERE id = ?").get(result.lastInsertRowid) as PostComment;
 }
 
-function ownedComment(commentId: number, actor: Pick<Person, "id" | "role">): PostComment {
+function ownedComment(commentId: number, actor: Pick<Person, "id">): PostComment {
   const comment = getHealthDb().prepare("SELECT * FROM post_comments WHERE id = ?").get(commentId) as PostComment | undefined;
   if (!comment) throw new CommentError("That comment no longer exists.", 404);
-  if (comment.person_id !== actor.id && actor.role !== "admin") throw new CommentError("You can only change your own comments.", 403);
+  if (comment.person_id !== actor.id) throw new CommentError("Only the person who wrote a comment can change it.", 403);
   return comment;
 }
 
-/** Only the author can edit their words; not even an admin rewrites someone else's comment. */
-export function editComment(commentId: number, actor: Pick<Person, "id" | "role">, body: unknown): PostComment {
-  const comment = ownedComment(commentId, actor);
-  if (comment.person_id !== actor.id) throw new CommentError("Only the person who wrote a comment can edit it.", 403);
+/** Only the author can edit their words. */
+export function editComment(commentId: number, actor: Pick<Person, "id">, body: unknown): PostComment {
+  ownedComment(commentId, actor);
   const db = getHealthDb();
   db.prepare("UPDATE post_comments SET body = ?, edited_at = datetime('now') WHERE id = ?").run(cleanBody(body), commentId);
   return db.prepare("SELECT * FROM post_comments WHERE id = ?").get(commentId) as PostComment;
 }
 
-/** The author, or an admin (for moderation), can remove a comment. */
-export function deleteComment(commentId: number, actor: Pick<Person, "id" | "role">): PostComment {
+/** Only the author can remove their comment. */
+export function deleteComment(commentId: number, actor: Pick<Person, "id">): PostComment {
   const comment = ownedComment(commentId, actor);
   getHealthDb().prepare("DELETE FROM post_comments WHERE id = ?").run(commentId);
   return comment;

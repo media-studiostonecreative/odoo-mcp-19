@@ -1,6 +1,6 @@
 /* Social dashboard — deliberately quieter than the Website Health board:
-   flat near-black, one warm highlight (amber, for anything you act on or that
-   is scheduled) and one muted second colour (sage, for done/posted/events).
+   flat near-black, one highlight (teal, for anything you act on or that is
+   scheduled) and one muted second colour (lavender, for done/posted/events).
    Red appears only on destructive actions. */
 :root {
   color-scheme: dark;
@@ -14,13 +14,14 @@
   --text-soft: #8e8e95;
   --text-faint: #5d5d64;
 
-  --accent: #f2b84b;
-  --accent-strong: #ffd27f;
-  --accent-soft: rgba(242, 184, 75, 0.13);
-  --on-accent: #1c1405;
+  --accent: #3bbfad;
+  --accent-strong: #62d3c4;
+  --accent-soft: rgba(59, 191, 173, 0.14);
+  --accent-border: rgba(59, 191, 173, 0.38);
+  --on-accent: #03201c;
 
-  --second: #93c2aa;
-  --second-soft: rgba(147, 194, 170, 0.13);
+  --second: #aba3dc;
+  --second-soft: rgba(171, 163, 220, 0.14);
 
   --positive: var(--second);
   --warning: var(--accent);
@@ -251,7 +252,7 @@ textarea.input {
   color: var(--accent);
 }
 
-/* Waiting for a decision: neutral pill, amber dot — so a list of them stays calm. */
+/* Waiting for a decision: neutral pill, teal dot — so a list of them stays calm. */
 .pill-review {
   color: var(--text);
 }

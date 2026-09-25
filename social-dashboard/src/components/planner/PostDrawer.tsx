@@ -375,7 +375,7 @@ function CommentRow({ comment, me, onChanged }: { comment: PlannerComment; me: M
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mine = me?.id === comment.person_id;
-  const canDelete = mine || me?.role === "admin";
+  const canDelete = mine;
 
   async function send(method: "PATCH" | "DELETE") {
     setBusy(true);
