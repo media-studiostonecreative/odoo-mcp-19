@@ -80,5 +80,16 @@ dashboard/next-env.d.ts
 !dashboard/src/lib/
 !dashboard/src/lib/**
 
+# Social dashboard (separate Next.js app, extracted from dashboard/ — see social-dashboard/)
+social-dashboard/node_modules/
+social-dashboard/.next/
+social-dashboard/out/
+social-dashboard/data/
+social-dashboard/*.tsbuildinfo
+social-dashboard/coverage/
+social-dashboard/next-env.d.ts
+!social-dashboard/src/lib/
+!social-dashboard/src/lib/**
+
 # Local git worktrees used for isolated feature work (superpowers skills).
 .worktrees/
