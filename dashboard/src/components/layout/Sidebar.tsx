@@ -15,8 +15,6 @@ const BUSINESS_AND_MARKETING: NavItem[] = [
   { href: "/business", label: "Business Data", enabled: true },
   { href: "/marketing/email", label: "Email Marketing", enabled: true },
   { href: "/marketing/journey", label: "Customer Journey", enabled: true },
-  { href: "/marketing/social", label: "Social Media", enabled: true },
-  { href: "/social-intelligence", label: "Social Intelligence", enabled: true },
 ];
 
 const TOOLS: NavItem[] = [

@@ -44,7 +44,6 @@ describe("static guarantee: app/component/route surfaces never reference raw cre
       ...walk(path.join(ROOT, "src/lib/odoo")),
       ...walk(path.join(ROOT, "src/lib/settings")),
       ...walk(path.join(ROOT, "src/lib/shopify")),
-      ...walk(path.join(ROOT, "src/lib/social")),
       path.join(ROOT, "src/lib/db.ts"),
     ];
 
