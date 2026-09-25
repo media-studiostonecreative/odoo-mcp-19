@@ -579,6 +579,7 @@ const CALENDAR_TYPE_LABEL: Record<CalendarEntryType, string> = {
   occasion: "Occasion",
   "trade-show": "Event",
   "content-idea": "Scheduled / Posted",
+  "story-post": "Story Post",
   "post-deadline": "Post-By Deadline (not the event)",
 };
 
@@ -586,6 +587,7 @@ const CALENDAR_TYPE_COLOR: Record<CalendarEntryType, string> = {
   occasion: "rgba(122, 162, 255, 0.28)",
   "trade-show": "rgba(255, 158, 87, 0.28)",
   "content-idea": "rgba(120, 220, 160, 0.28)",
+  "story-post": "rgba(200, 130, 240, 0.32)",
   "post-deadline": "rgba(240, 201, 117, 0.32)",
 };
 
@@ -681,11 +683,13 @@ function ContentCalendarPanel({ entries, loading, onChanged }: { entries: Calend
         Click any day for details.
       </p>
       <p style={{ fontSize: 12, color: "var(--text-soft)", marginBottom: 14, lineHeight: 1.5 }}>
-        <strong style={{ color: "var(--text)" }}>Green and yellow mean different things:</strong> green is a specific content idea —{" "}
-        <em>&quot;Scheduled: …&quot;</em> means it&apos;s drafted and dated but still awaiting your approval, <em>&quot;Posted: …&quot;</em>{" "}
-        means it actually went out. Yellow <em>&quot;Post-By Deadline&quot;</em> has no post attached yet — it&apos;s a computed
-        reminder that something needs to be live by that date, sitting earlier than the occasion/show it&apos;s for (not on the
-        occasion/show date itself, and not a fixed &quot;post exactly on this day&quot; instruction — any day up to it works).
+        <strong style={{ color: "var(--text)" }}>Green, purple, and yellow mean different things:</strong> green is a regular content
+        idea (photo/reel/carousel) and purple is one in Story format, kept in its own category so time-sensitive event/show Stories
+        don&apos;t get lost among ordinary feed posts — both use <em>&quot;Scheduled: …&quot;</em> for one still awaiting your approval
+        and <em>&quot;Posted: …&quot;</em> for one that actually went out. Yellow <em>&quot;Post-By Deadline&quot;</em> has no post
+        attached yet — it&apos;s a computed reminder that something needs to be live by that date, sitting earlier than the
+        occasion/show it&apos;s for (not on the occasion/show date itself, and not a fixed &quot;post exactly on this day&quot;
+        instruction — any day up to it works).
       </p>
       {showForm && (
         <form onSubmit={handleAddTradeShow} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16, padding: 16, border: "1px dashed var(--border)", borderRadius: 10 }}>
@@ -928,7 +932,7 @@ export default function SocialIntelligencePage() {
   const attributionRows = attribution?.rows ?? [];
 
   const contentIdeasLite: CalendarContentIdea[] = useMemo(
-    () => contentIdeas.map((i) => ({ id: i.id, idea_type: i.idea_type, target_date: i.target_date, product: i.product, platform: i.platform, status: i.status })),
+    () => contentIdeas.map((i) => ({ id: i.id, idea_type: i.idea_type, target_date: i.target_date, product: i.product, platform: i.platform, status: i.status, format: i.format })),
     [contentIdeas],
   );
 

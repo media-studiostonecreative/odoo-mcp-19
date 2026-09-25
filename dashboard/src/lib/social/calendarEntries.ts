@@ -8,7 +8,7 @@
  * from a client component.
  */
 
-export type CalendarEntryType = "occasion" | "trade-show" | "content-idea" | "post-deadline";
+export type CalendarEntryType = "occasion" | "trade-show" | "content-idea" | "story-post" | "post-deadline";
 
 export interface CalendarEntry {
   key: string;
@@ -45,6 +45,7 @@ export interface CalendarContentIdea {
   product: string;
   platform: string;
   status: string;
+  format: string;
 }
 
 function isoRange(start: string, end: string): string[] {
@@ -95,14 +96,16 @@ export function buildCalendarEntries(occasions: CalendarOccasion[], tradeShows: 
     .filter((i) => i.target_date && i.status !== "dismissed")
     .map((i) => {
       const posted = i.status === "used";
+      const isStory = i.format === "story";
+      const type: CalendarEntryType = isStory ? "story-post" : "content-idea";
       return {
         key: `content-idea-${i.id}`,
-        type: "content-idea" as const,
+        type,
         date: i.target_date!,
-        label: `${posted ? "Posted" : "Scheduled"}: ${i.product} (${i.platform})`,
+        label: `${posted ? "Posted" : "Scheduled"}${isStory ? " story" : ""}: ${i.product} (${i.platform})`,
         detail: posted
-          ? `This was published on this day — ${i.idea_type} idea.`
-          : `Drafted and scheduled to go out on this day, not yet confirmed as posted — ${i.idea_type} idea, currently ${i.status}. Approve it in Content Ideas once it's ready.`,
+          ? `This was published on this day — ${i.idea_type} idea${isStory ? ", story format" : ""}.`
+          : `Drafted and scheduled to go out on this day, not yet confirmed as posted — ${i.idea_type} idea${isStory ? ", story format" : ""}, currently ${i.status}. Approve it in Content Ideas once it's ready.`,
       };
     });
 

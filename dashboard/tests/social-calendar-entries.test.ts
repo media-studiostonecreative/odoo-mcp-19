@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildCalendarEntries, upcomingDeadlineAlerts, type CalendarOccasion, type CalendarTradeShow } from "@/lib/social/calendarEntries";
+import { buildCalendarEntries, upcomingDeadlineAlerts, type CalendarOccasion, type CalendarTradeShow, type CalendarContentIdea } from "@/lib/social/calendarEntries";
 
 const OCCASION: CalendarOccasion = {
   id: "halloween",
@@ -46,6 +46,14 @@ describe("buildCalendarEntries", () => {
     const entries = buildCalendarEntries([OCCASION], [TRADE_SHOW], []);
     const dates = entries.map((e) => e.date);
     expect(dates).toEqual([...dates].sort());
+  });
+
+  it("categorizes a story-format content idea as story-post, not content-idea", () => {
+    const storyIdea: CalendarContentIdea = { id: 1, idea_type: "new", target_date: "2026-10-30", product: "Test Show", platform: "instagram", status: "suggested", format: "story" };
+    const photoIdea: CalendarContentIdea = { id: 2, idea_type: "new", target_date: "2026-10-30", product: "Test Photo", platform: "instagram", status: "suggested", format: "photo" };
+    const entries = buildCalendarEntries([], [], [storyIdea, photoIdea]);
+    expect(entries.find((e) => e.key === "content-idea-1")!.type).toBe("story-post");
+    expect(entries.find((e) => e.key === "content-idea-2")!.type).toBe("content-idea");
   });
 });
 
